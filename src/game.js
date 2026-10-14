@@ -42,7 +42,12 @@ export class Game {
     this.bindInput();
     $('coinIcon').innerHTML = icon('coin', 22);
     $('clubIcon').innerHTML = icon('trophy', 22);
-    Board.boardReady().then((ok) => { this.social = ok; $('clubBtn').hidden = !ok; this.refreshClubBtn(); });
+    Board.boardReady().then((ok) => {
+      this.social = ok;
+      $('clubBtn').hidden = !ok;
+      this.refreshClubBtn();
+      if (ok) Board.recordStars(Object.values(this.save.stars).reduce((a, b) => a + b, 0)); // backfill tour standings
+    });
     Board.onSocial((ev) => this.onSocial(ev));
   }
 
@@ -726,8 +731,9 @@ export class Game {
   // Your best drives go to your local save and, on claude.ai, to the shared boards.
   postDrive(yards, x) {
     const r = this.run, lv = r.level, s = this.save;
+    const feed = yards >= lv.stars[0] * 0.75; // only real bombs make the feed and the live ticker
     if (lv.daily) {
-      Board.recordDaily(lv.date, yards, x, s.golfer);
+      Board.recordDaily(lv.date, yards, x, s.golfer, { feed });
       return;
     }
     if (yards > (s.best[lv.id] || 0)) {
@@ -735,7 +741,7 @@ export class Game {
       s.bestX = { ...s.bestX, [lv.id]: Math.round(x * 10) / 10 };
       this.persist();
     }
-    Board.recordLevelDrive(lv.id, yards, x, s.golfer).then((res) => {
+    Board.recordLevelDrive(lv.id, yards, x, s.golfer, { feed }).then((res) => {
       if (!res?.record || this.run !== r) return;
       this.pop('COURSE RECORD!', 'green');
       sfx.fanfare();

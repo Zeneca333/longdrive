@@ -31,6 +31,9 @@ export function initBoard() {
       const snap = await db.doc(`drives/${me}`).get();
       exists = snap.exists;
       mine = snap.exists ? { ...snap.data() } : {};
+      // Rows written by older versions may lack (or understate) the longest drive: repair from the level bests.
+      const top = bestLevel();
+      if (top.yards > (mine.longest || 0)) patch({ longest: top.yards, longestLv: top.lv });
       initRoom();
       return true;
     } catch {
@@ -116,18 +119,30 @@ function patch(fields) {
   return chain;
 }
 
-// Record a drive on a tour level. Resolves {best, record} or null when there's no board.
-export async function recordLevelDrive(lv, yards, x, golfer) {
+function bestLevel() {
+  let best = { yards: 0, lv: 0 };
+  for (const [k, v] of Object.entries(mine)) {
+    const m = /^l(\d+)$/.exec(k);
+    if (m && typeof v === 'number' && v > best.yards) best = { yards: v, lv: Number(m[1]) };
+  }
+  return best;
+}
+
+// Record a drive on a tour level. Only a `feed`-worthy drive (a real bomb, not a first-ball
+// shank) goes to the recent-bombs feed and the live ticker. Resolves {best, record} or null.
+export async function recordLevelDrive(lv, yards, x, golfer, { feed = true } = {}) {
   if (!(await ready) || !(yards > 0)) return null;
   const key = `l${lv}`;
   if ((mine[key] || 0) >= yards) return { best: false, record: false };
   const top = await levelTop(lv, 1);
   const holder = top?.[0];
   const record = !holder || yards > holder.yards;
-  const fields = { [key]: yards, [`g${lv}`]: golfer, [`x${lv}`]: round1(x), lastYds: yards, lastLv: lv, lastAt: Date.now() };
-  if (yards > (mine.longest || 0)) Object.assign(fields, { longest: yards, longestLv: lv });
+  const longest = Math.max(mine.longest || 0, bestLevel().yards);
+  const fields = { [key]: yards, [`g${lv}`]: golfer, [`x${lv}`]: round1(x) };
+  if (feed || record) Object.assign(fields, { lastYds: yards, lastLv: lv, lastAt: Date.now() });
+  if (yards > longest) Object.assign(fields, { longest: yards, longestLv: lv });
   patch(fields);
-  room?.emit('drive', { lv, yds: yards, record, prev: record && holder && !holder.isMe ? holder.id : null }).catch(() => {});
+  if (feed || record) room?.emit('drive', { lv, yds: yards, record, prev: record && holder && !holder.isMe ? holder.id : null }).catch(() => {});
   return { best: true, record };
 }
 
@@ -136,11 +151,13 @@ export async function recordStars(total) {
   patch({ stars: total });
 }
 
-export async function recordDaily(date, yards, x, golfer) {
+export async function recordDaily(date, yards, x, golfer, { feed = true } = {}) {
   if (!(await ready) || !(yards > 0)) return null;
   if (mine.dDate === date && (mine.dBest || 0) >= yards) return { best: false };
-  patch({ dDate: date, dBest: yards, dX: round1(x), dGolfer: golfer, lastYds: yards, lastLv: 0, lastAt: Date.now() });
-  room?.emit('drive', { lv: 0, yds: yards, daily: true }).catch(() => {});
+  const fields = { dDate: date, dBest: yards, dX: round1(x), dGolfer: golfer };
+  if (feed) Object.assign(fields, { lastYds: yards, lastLv: 0, lastAt: Date.now() });
+  patch(fields);
+  if (feed) room?.emit('drive', { lv: 0, yds: yards, daily: true }).catch(() => {});
   return { best: true };
 }
 
