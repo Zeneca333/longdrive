@@ -379,3 +379,14 @@ body.guest #shot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 110px
   .rank li, .board li { grid-template-columns: 1.6em 24px minmax(0, 1fr) auto; }
   .rank .club, .board .club { display: none; }
 }
+
+/* leaderboard name */
+.name-form { display: grid; gap: 6px; background: var(--paper); border: 3px solid var(--ink); padding: 10px 12px; }
+.name-form label { font-family: var(--display); font-size: 0.8em; letter-spacing: 0.05em; text-transform: uppercase; }
+.name-row { display: flex; gap: 8px; }
+.name-row input { flex: 1; min-width: 0; font: inherit; font-family: var(--display); font-size: 1.1em; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink); background: #fff; border: 3px solid var(--ink); padding: 8px 10px; user-select: text; -webkit-user-select: text; }
+.name-row input:focus { outline: 3px solid var(--blue); outline-offset: 1px; }
+.name-row .btn { padding: 0.5em 1em; }
+.name-msg { margin: 0; font-weight: 600; }
+.name-card { width: min(460px, 100%); }
+.playing-as { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

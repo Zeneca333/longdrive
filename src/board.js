@@ -9,6 +9,7 @@
 //   longest, longestLv longest drive anywhere
 //   lastYds, lastLv, lastAt   most recent personal best (feeds "recent bombs")
 //   dDate, dBest, dX, dGolfer today's Daily Drive
+//   nick               the name the player typed for the boards (falls back to their claude.ai name)
 
 let db = null;
 let user = null;
@@ -65,9 +66,9 @@ function onMessage(msg) {
     const yds = Number(d.yds);
     const lv = Number(d.lv);
     if (!Number.isFinite(yds) || yds <= 0 || yds > 5000 || !(lv >= 0 && lv <= 9)) return;
-    emitLocal({ type: 'drive', by: msg.by, yds, lv, daily: !!d.daily, record: !!d.record, tookMine: d.prev === me });
+    emitLocal({ type: 'drive', by: msg.by, nick: cleanNick(d.nick), yds, lv, daily: !!d.daily, record: !!d.record, tookMine: d.prev === me });
   } else if (msg.topic === 'kudos' && d.to === me) {
-    emitLocal({ type: 'kudos', by: msg.by });
+    emitLocal({ type: 'kudos', by: msg.by, nick: cleanNick(d.nick) });
   }
 }
 
@@ -78,7 +79,7 @@ export function onSocial(fn) { listeners.add(fn); return () => listeners.delete(
 
 export function setPresence(patch) { room?.presence(patch).catch(() => {}); }
 
-export function sendKudos(to) { room?.emit('kudos', { to }).catch(() => {}); }
+export function sendKudos(to) { room?.emit('kudos', { to, nick: mine.nick || '' }).catch(() => {}); }
 
 // Other people on the course right now, one entry per person.
 export async function onlineNow() {
@@ -86,11 +87,11 @@ export async function onlineNow() {
   const seen = new Map();
   for (const p of room.peers()) {
     if (p.kind !== 'viewer' || p.isMe || !p.by || seen.has(p.by)) continue;
-    seen.set(p.by, { id: p.by, lv: Number(p.presence?.lv) || 0, daily: !!p.presence?.daily });
+    seen.set(p.by, { id: p.by, lv: Number(p.presence?.lv) || 0, daily: !!p.presence?.daily, nick: cleanNick(p.presence?.nick) });
   }
   const rows = [...seen.values()];
   const people = rows.length ? await user.profiles(rows.map((r) => r.id)) : {};
-  return rows.map((r) => ({ ...r, name: people[r.id]?.name || 'Someone', avatar: people[r.id]?.avatarUrl || '' }));
+  return rows.map((r) => ({ ...r, name: r.nick || people[r.id]?.name || 'Golfer', avatar: people[r.id]?.avatarUrl || '' }));
 }
 
 export function onlineCount() {
@@ -142,8 +143,29 @@ export async function recordLevelDrive(lv, yards, x, golfer, { feed = true } = {
   if (feed || record) Object.assign(fields, { lastYds: yards, lastLv: lv, lastAt: Date.now() });
   if (yards > longest) Object.assign(fields, { longest: yards, longestLv: lv });
   patch(fields);
-  if (feed || record) room?.emit('drive', { lv, yds: yards, record, prev: record && holder && !holder.isMe ? holder.id : null }).catch(() => {});
+  if (feed || record) room?.emit('drive', { lv, yds: yards, record, prev: record && holder && !holder.isMe ? holder.id : null, nick: mine.nick || '' }).catch(() => {});
   return { best: true, record };
+}
+
+// The name shown on the boards. Typed by the player, so it's cleaned here and escaped wherever it's drawn.
+export async function setNick(name) {
+  const nick = cleanNick(name);
+  if (!(await ready) || !nick || mine.nick === nick) return;
+  patch({ nick });
+}
+
+export function myBoardNick() { return mine.nick || ''; }
+
+// Older versions fed first-ball mishits into "recent bombs". Drop yours from the feed if it was one.
+export async function tidyFeed(minYardsForLevel) {
+  if (!(await ready) || !mine.lastAt || !(mine.lastLv > 0)) return;
+  if (mine.lastYds < minYardsForLevel(mine.lastLv)) patch({ lastAt: 0 });
+}
+
+// A starting suggestion for the name box: the first word of the viewer's claude.ai name, if any.
+export async function suggestedNick() {
+  if (!(await ready)) return '';
+  try { return cleanNick(((await user.me()).name || '').split(' ')[0]); } catch { return ''; }
 }
 
 export async function recordStars(total) {
@@ -157,7 +179,7 @@ export async function recordDaily(date, yards, x, golfer, { feed = true } = {}) 
   const fields = { dDate: date, dBest: yards, dX: round1(x), dGolfer: golfer };
   if (feed) Object.assign(fields, { lastYds: yards, lastLv: 0, lastAt: Date.now() });
   patch(fields);
-  if (feed) room?.emit('drive', { lv: 0, yds: yards, daily: true }).catch(() => {});
+  if (feed) room?.emit('drive', { lv: 0, yds: yards, daily: true, nick: mine.nick || '' }).catch(() => {});
   return { best: true };
 }
 
@@ -168,7 +190,7 @@ async function withNames(rows) {
   const online = new Set(room ? room.peers().filter((p) => p.kind === 'viewer' && p.by).map((p) => p.by) : []);
   return rows.map((r) => ({
     ...r,
-    name: people[r.id]?.name || 'Someone',
+    name: r.nick || people[r.id]?.name || 'Golfer',
     avatar: people[r.id]?.avatarUrl || '',
     isMe: r.id === me,
     online: online.has(r.id) && r.id !== me,
@@ -182,7 +204,7 @@ export async function levelTop(lv, n = 10) {
     const key = `l${lv}`;
     const snap = await db.collection('drives').orderBy(key, 'desc').limit(n).get();
     const rows = snap.docs
-      .map((d) => { const v = d.data(); return { id: d.id, yards: v[key], golfer: v[`g${lv}`], x: v[`x${lv}`] ?? 0 }; })
+      .map((d) => { const v = d.data(); return { id: d.id, nick: cleanNick(v.nick), yards: v[key], golfer: v[`g${lv}`], x: v[`x${lv}`] ?? 0 }; })
       .filter((r) => typeof r.yards === 'number');
     return withNames(rows);
   } catch {
@@ -196,7 +218,7 @@ export async function dailyTop(date) {
   try {
     const snap = await db.collection('drives').where('dDate', '==', date).limit(500).get();
     const rows = snap.docs
-      .map((d) => { const v = d.data(); return { id: d.id, yards: v.dBest, golfer: v.dGolfer, x: v.dX ?? 0 }; })
+      .map((d) => { const v = d.data(); return { id: d.id, nick: cleanNick(v.nick), yards: v.dBest, golfer: v.dGolfer, x: v.dX ?? 0 }; })
       .filter((r) => typeof r.yards === 'number')
       .sort((a, b) => b.yards - a.yards);
     return withNames(rows);
@@ -211,7 +233,7 @@ export async function tourTop(n = 20) {
   try {
     const snap = await db.collection('drives').orderBy('stars', 'desc').limit(100).get();
     const rows = snap.docs
-      .map((d) => { const v = d.data(); return { id: d.id, stars: v.stars || 0, longest: v.longest || 0, longestLv: v.longestLv }; })
+      .map((d) => { const v = d.data(); return { id: d.id, nick: cleanNick(v.nick), stars: v.stars || 0, longest: v.longest || 0, longestLv: v.longestLv }; })
       .filter((r) => r.stars > 0 || r.longest > 0)
       .sort((a, b) => b.stars - a.stars || b.longest - a.longest)
       .slice(0, n);
@@ -227,8 +249,8 @@ export async function recentBombs(n = 6) {
   try {
     const snap = await db.collection('drives').orderBy('lastAt', 'desc').limit(n).get();
     const rows = snap.docs
-      .map((d) => { const v = d.data(); return { id: d.id, yards: v.lastYds, lv: v.lastLv, at: v.lastAt }; })
-      .filter((r) => typeof r.yards === 'number' && typeof r.at === 'number');
+      .map((d) => { const v = d.data(); return { id: d.id, nick: cleanNick(v.nick), yards: v.lastYds, lv: v.lastLv, at: v.lastAt }; })
+      .filter((r) => typeof r.yards === 'number' && r.at > 0);
     return withNames(rows);
   } catch {
     return null;
@@ -239,3 +261,9 @@ export async function recentBombs(n = 6) {
 export function topDrives(lv, n) { return levelTop(lv, n); }
 
 function round1(v) { return Math.round((Number(v) || 0) * 10) / 10; }
+
+// Letters (any alphabet), digits, spaces and a little punctuation; 14 characters max.
+export function cleanNick(v) {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[^\p{L}\p{N} ._'-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 14);
+}

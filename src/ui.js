@@ -99,6 +99,7 @@ export function renderEnd(game, d) {
         ${finale ? '<p class="tip">You drove a golf ball across the Moon. Your family is worried about you.</p>' : ''}
         ${d.unlockedRex ? '<p class="chip gold">New golfer unlocked: Rex the T. rex (Menu → Golfer)</p>' : ''}
       </div>
+      ${game.social && !game.save.nick ? nameFormHtml('Put your name on the leaderboard', 'end') : ''}
       <div class="board" id="endBoard" hidden></div>
       <button class="btn big grass end-go" id="endGo">${primary}</button>
       <div class="end-links">
@@ -108,12 +109,14 @@ export function renderEnd(game, d) {
         ${d.best > 0 ? '<button class="link-btn" id="endBrag">Copy brag</button>' : ''}
       </div>
     </div>`;
-  const board = el.querySelector('#endBoard');
-  Board.levelTop(lv.id, 3).then((rows) => {
-    if (!rows || !rows.length || !board.isConnected) return;
-    board.hidden = false;
-    board.innerHTML = `<ol>${rows.map((r) => `<li class="${r.isMe ? 'me' : ''}"><span class="who">${esc(r.isMe ? `${r.name} (you)` : r.name)}</span><span class="club">${esc(golferName(r.golfer))}</span><b>${r.yards.toFixed(1)}</b></li>`).join('')}</ol>`;
+  bindNameForm(el, game, () => refreshEndBoard());
+  const refreshEndBoard = () => Board.levelTop(lv.id, 3).then((rows) => {
+    const b = el.querySelector('#endBoard');
+    if (!rows || !rows.length || !b) return;
+    b.hidden = false;
+    b.innerHTML = `<ol>${rows.map((r) => rowHtml(r, r.yards.toFixed(1), golferName(r.golfer))).join('')}</ol>`;
   });
+  refreshEndBoard();
   on(el, '#endGo', () => { sfx.click(); game.endPrimary(); });
   on(el, '#endRetry', () => { sfx.click(); game.restartLevel(); });
   on(el, '#endShop', () => { sfx.click(); game.openShop('end'); });
@@ -134,6 +137,7 @@ export function renderMenu(game) {
       <button class="btn daily-btn" id="mDaily">${esc(dailyLabel(game))}</button>
       <div class="menu-grid">
         ${game.social ? '<button class="btn ghost" id="mClub">Clubhouse</button>' : ''}
+        ${game.social ? `<button class="btn ghost" id="mName">Name: ${esc(s.nick || 'not set')}</button>` : ''}
         <button class="btn ghost" id="mLevels">Levels</button>
         <button class="btn blue" id="mShop">Pro Shop</button>
         <button class="btn ghost" id="mGolfer">Golfer: ${esc(golferName(s.golfer))}</button>
@@ -146,6 +150,7 @@ export function renderMenu(game) {
   on(el, '#mLevels', () => { sfx.click(); game.openMap('menu'); });
   on(el, '#mDaily', () => { sfx.click(); game.startDaily(); });
   on(el, '#mClub', () => { sfx.click(); game.openClub('level', 'menu'); });
+  on(el, '#mName', () => { sfx.click(); game.openName('menu'); });
   on(el, '#mShop', () => { sfx.click(); game.openShop('menu'); });
   on(el, '#mGolfer', () => { sfx.click(); game.openSelect('menu'); });
   on(el, '#mHow', () => { sfx.click(); game.openHowto('menu'); });
@@ -295,6 +300,7 @@ export function renderDailyEnd(game, d) {
         <p id="dailyRank">${game.social ? 'Checking the board…' : 'Same course for everyone today. A new one lands at midnight UTC.'}</p>
         <p class="tip">+${d.roundCoins} coins</p>
       </div>
+      ${game.social && !game.save.nick ? nameFormHtml('Put your name on the leaderboard', 'end') : ''}
       <div class="board" id="endBoard" hidden></div>
       <button class="btn big grass end-go" id="endGo">Back to the tour</button>
       <div class="end-links">
@@ -313,6 +319,7 @@ export function renderDailyEnd(game, d) {
     board.innerHTML = `<ol>${rows.slice(0, 5).map((r) => rowHtml(r, r.yards.toFixed(1), golferName(r.golfer))).join('')}</ol>`;
   });
   on(el, '#endGo', () => { sfx.click(); game.endPrimary(); });
+  bindNameForm(el, game, () => {});
   on(el, '#endBrag', () => game.brag(game.bragLine()));
   on(el, '#endClub', () => { sfx.click(); game.openClub('daily', 'end'); });
   setTimeout(() => el.querySelector('#endGo')?.focus({ preventScroll: true }), 50);
@@ -343,6 +350,7 @@ export function renderClub(game, tab = 'level', back = 'menu') {
         <div><div class="eyebrow">Clubhouse</div><h2>Leaderboards</h2></div>
         <div class="online-pill" id="clubOnlinePill" hidden></div>
       </div>
+      <p class="playing-as">Playing as <b>${esc(game.save.nick || 'no name yet')}</b> · <button class="link-btn" id="clubName">${game.save.nick ? 'Change' : 'Set your name'}</button></p>
       <div class="seg" role="tablist">
         <button role="tab" data-tab="daily">Daily Drive</button>
         <button role="tab" data-tab="level">Levels</button>
@@ -435,6 +443,7 @@ export function renderClub(game, tab = 'level', back = 'menu') {
     box.innerHTML = people.map((p) => `<span class="here-p">${p.avatar ? `<img class="av" src="${esc(p.avatar)}" alt="" width="24" height="24">` : ''}${esc(p.name)} <span class="muted">${p.daily ? 'Daily Drive' : esc(LEVELS[p.lv - 1]?.name || 'warming up')}</span></span>`).join('');
   });
 
+  on(el, '#clubName', () => { sfx.click(); game.openName('club'); });
   on(el, '.seg button', (b) => { sfx.tick(); show(b.dataset.tab); });
   on(el, '#clubBrag', () => game.brag(tab === 'daily' && dailyDone(game)
     ? `Daily Drive ${prettyDate(todayKey())}: ${dailyState(game).best.toFixed(1)} yds in LONG DRIVE INSANITY. Same course, same wind, your move:`
@@ -453,4 +462,53 @@ export function showCopyFallback(text) {
   box.focus();
   box.select();
   setTimeout(() => box.remove(), 8000);
+}
+
+// ---------- leaderboard name ----------
+
+// `key` keeps ids unique: the round-end card and the name screen can both be in the page.
+function nameFormHtml(label, key) {
+  return `
+    <form class="name-form" data-name-form autocomplete="off">
+      <label for="${key}NameInput">${esc(label)}</label>
+      <div class="name-row">
+        <input id="${key}NameInput" name="nick" maxlength="14" autocapitalize="words" spellcheck="false" placeholder="Your name" enterkeyhint="done">
+        <button class="btn grass" type="submit">Save</button>
+      </div>
+      <p class="name-msg" hidden></p>
+    </form>`;
+}
+
+function bindNameForm(root, game, onSaved, { prefill = '' } = {}) {
+  const form = root.querySelector('[data-name-form]');
+  if (!form) return;
+  const input = form.querySelector('input');
+  const msg = form.querySelector('.name-msg');
+  input.value = prefill;
+  if (!prefill) Board.suggestedNick().then((n) => { if (n && !input.value) input.value = n; });
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const nick = game.setNick(input.value);
+    msg.hidden = false;
+    if (!nick) { msg.textContent = 'Use letters or numbers, up to 14.'; sfx.nope(); return; }
+    msg.textContent = `You're on the board as ${nick}.`;
+    form.querySelector('button').disabled = true;
+    input.blur();
+    root.querySelector('#endGo')?.focus({ preventScroll: true }); // so Space carries on to the next level
+    onSaved(nick);
+  };
+}
+
+export function renderName(game, back) {
+  const el = $('name');
+  el.innerHTML = `
+    <div class="sheet name-card" role="dialog" aria-label="Leaderboard name">
+      <h2>Your leaderboard name</h2>
+      ${nameFormHtml('Shown on every board, flag and shout-out', 'screen')}
+      <div class="sheet-foot"><button class="btn ghost" id="nameBack">Back</button></div>
+    </div>`;
+  bindNameForm(el, game, () => setTimeout(() => game.goBack(back), 700), { prefill: game.save.nick });
+  on(el, '#nameBack', () => { sfx.click(); game.goBack(back); });
+  setTimeout(() => el.querySelector('#screenNameInput')?.focus(), 50);
 }

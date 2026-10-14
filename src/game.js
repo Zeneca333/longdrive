@@ -17,7 +17,7 @@ const FLIGHT_SPEED = 1.7;
 const SHOT_CARD_SECS = 2.3;
 const BALL_COLORS = ['#ffc83d', '#ff4f6d', '#7fe3ff', '#9b6bff', '#8dff6a', '#ff9a3d'];
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const MODALS = new Set(['select', 'map', 'shop', 'pause', 'howto', 'club']);
+const MODALS = new Set(['select', 'map', 'shop', 'pause', 'howto', 'club', 'name']);
 const RIVAL_COLORS = ['#ffc83d', '#c9ced6', '#d9935a'];
 const pct = (m) => ((m - METER_MIN) / (METER_MAX - METER_MIN)) * 100;
 
@@ -46,7 +46,12 @@ export class Game {
       this.social = ok;
       $('clubBtn').hidden = !ok;
       this.refreshClubBtn();
-      if (ok) Board.recordStars(Object.values(this.save.stars).reduce((a, b) => a + b, 0)); // backfill tour standings
+      if (!ok) return;
+      Board.recordStars(Object.values(this.save.stars).reduce((a, b) => a + b, 0)); // backfill tour standings
+      Board.tidyFeed((lv) => (LEVELS[lv - 1]?.stars[0] || 0) * 0.75);
+      // Keep the leaderboard name in step between this browser and the board (e.g. a new device).
+      if (this.save.nick) Board.setNick(this.save.nick);
+      else if (Board.myBoardNick()) { this.save.nick = Board.myBoardNick(); this.persist(); }
     });
     Board.onSocial((ev) => this.onSocial(ev));
   }
@@ -96,6 +101,20 @@ export class Game {
   openMap(back = 'menu') { UI.renderMap(this, back); this.showScreen('map'); }
   openHowto(back = 'menu') { UI.renderHowto(this, back); this.showScreen('howto'); }
   openShop(back = 'menu') { UI.renderShop(this, back); this.showScreen('shop'); }
+  openName(back = 'menu') { UI.renderName(this, back); this.showScreen('name'); }
+
+  // Returns the cleaned name, or '' if nothing usable was typed.
+  setNick(raw) {
+    const nick = Board.cleanNick(raw);
+    if (!nick) return '';
+    this.save.nick = nick;
+    this.persist();
+    Board.setNick(nick);
+    Board.setPresence({ nick });
+    sfx.buy();
+    return nick;
+  }
+
   openMenu() { this.hideBanner(); this.clearToast(); UI.renderMenu(this); this.showScreen('pause'); }
 
   // The Clubhouse can open mid-game (from the HUD), from the menu or from a level-end card.
@@ -107,13 +126,15 @@ export class Game {
     }
     this.hideBanner();
     this.clearToast();
-    UI.renderClub(this, tab, back || 'menu');
+    this.clubBack = back || this.clubBack || 'menu';
+    UI.renderClub(this, tab, this.clubBack);
     this.showScreen('club');
   }
 
   goBack(back) {
     if (back === 'end') this.showScreen('end');
     else if (back === 'play') this.resume();
+    else if (back === 'club') this.openClub('level', this.clubBack);
     else this.openMenu();
   }
 
@@ -189,7 +210,7 @@ export class Game {
     this.beginAiming();
     this.stage.cameraAddress(0, 0, true);
     this.placeRivalFlags();
-    Board.setPresence({ lv: level.daily ? 0 : level.id, daily: !!level.daily });
+    Board.setPresence({ lv: level.daily ? 0 : level.id, daily: !!level.daily, nick: this.save.nick || '' });
   }
 
   restartLevel() {
@@ -815,8 +836,8 @@ export class Game {
 
   async onSocial(ev) {
     if (ev.type === 'peers') { this.refreshClubBtn(); return; }
-    const people = await Board.names([ev.by]);
-    const name = people[ev.by]?.name || 'Someone';
+    const people = ev.nick ? {} : await Board.names([ev.by]);
+    const name = ev.nick || people[ev.by]?.name || 'Someone';
     if (ev.type === 'kudos') {
       sfx.crate();
       this.ticker(`${name} says: nice drive!`);

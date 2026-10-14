@@ -5,6 +5,7 @@ export function freshSave() {
   return {
     coins: 0,
     golfer: 'chip',
+    nick: '',
     level: 1,
     unlocked: 1,
     stars: {},
