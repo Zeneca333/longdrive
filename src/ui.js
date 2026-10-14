@@ -2,10 +2,12 @@
 import { GOLFERS, GEAR, ITEMS, LEVELS } from './config.js';
 import { icon } from './icons.js';
 import { sfx } from './audio.js';
+import { topDrives } from './board.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const stars = (n, size = 18) => `<span class="stars">${[0, 1, 2].map((i) => `<span class="${i < n ? '' : 'off'}">${icon('star', size)}</span>`).join('')}</span>`;
+const golferName = (id) => GOLFERS.find((g) => g.id === id)?.name || 'Mystery golfer';
 const wallet = (g) => `<span class="wallet">${icon('coin', 22)}<span>${g.save.coins}</span></span>`;
 
 function on(root, sel, fn) {
@@ -178,8 +180,17 @@ export function renderIntro(game, level) {
         <div>Grid ${level.grid} yds wide</div>
       </div>
       <p><b>On the course:</b> ${list.length ? esc(list.join(', ')) : 'Nothing but a bucket of balls'}.</p>
+      <p class="record" id="introRecord" hidden></p>
       <div class="sheet-foot"><button class="btn ghost" id="introBack">Tour map</button><button class="btn big grass" id="introGo">Tee it up</button></div>
     </div>`;
+  const rec = el.querySelector('#introRecord');
+  topDrives(level.id, 1).then((rows) => {
+    if (!rows || !rec.isConnected) return;
+    rec.hidden = false;
+    rec.innerHTML = rows.length
+      ? `${icon('star', 16)} <b>Course record:</b> ${rows[0].yards.toFixed(1)} yds by ${esc(rows[0].isMe ? 'you' : rows[0].name)} (${esc(golferName(rows[0].golfer))})`
+      : `${icon('star', 16)} <b>No course record yet.</b> Post a drive and it's yours.`;
+  });
   on(el, '#introGo', () => { sfx.click(); game.beginAiming(); });
   on(el, '#introBack', () => { sfx.click(); game.openMap(); });
 }
@@ -235,6 +246,7 @@ export function renderEnd(game, d) {
         ${d.starBonus ? `<span>New star bonus</span><b>${d.starBonus}</b>` : ''}
         <span class="total">Round total</span><b class="total">${total}</b>
       </div>
+      <div class="board" id="endBoard" hidden></div>
       ${d.unlockedRex ? '<p class="chip gold" style="justify-self:center">New golfer unlocked: Rex the T. rex</p>' : ''}
       ${d.firstClear && next ? `<p class="chip green" style="justify-self:center">Unlocked: ${esc(next.name)}</p>` : ''}
       <div class="sheet-foot">
@@ -244,6 +256,14 @@ export function renderEnd(game, d) {
         ${d.cleared && next ? '<button class="btn grass" id="endNext">Next level</button>' : ''}
       </div>
     </div>`;
+  const board = el.querySelector('#endBoard');
+  topDrives(lv.id, 5).then((rows) => {
+    if (!rows || !board.isConnected) return;
+    board.hidden = false;
+    board.innerHTML = `<h3>Leaderboard</h3>${rows.length
+      ? `<ol>${rows.map((r) => `<li class="${r.isMe ? 'me' : ''}"><span class="who">${esc(r.isMe ? `${r.name} (you)` : r.name)}</span><span class="club">${esc(golferName(r.golfer))}</span><b>${r.yards.toFixed(1)}</b></li>`).join('')}</ol>`
+      : '<p>No drives posted yet.</p>'}`;
+  });
   on(el, '#endMap', () => { sfx.click(); game.openMap(); });
   on(el, '#endShop', () => { sfx.click(); renderShop(game, 'gear', 'end'); game.showScreen('shop'); });
   on(el, '#endRetry', () => { sfx.click(); game.restartLevel(); });

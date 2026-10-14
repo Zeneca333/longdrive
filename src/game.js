@@ -8,6 +8,7 @@ import { loadSave, writeSave } from './save.js';
 import { initAudio, sfx, setMuted } from './audio.js';
 import { icon } from './icons.js';
 import * as UI from './ui.js';
+import { submitDrive } from './board.js';
 
 const $ = (id) => document.getElementById(id);
 const FLIGHT_SPEED = 1.45;
@@ -634,6 +635,7 @@ export class Game {
     else if (yards > prevBest && yards > 0) { sfx.cheer(false); this.stage.cheer = 2; }
     else if (yards > 0 && yards < target * 0.7) sfx.groan();
 
+    if (!score.reason) submitDrive(r.level.id, yards, this.save.golfer);
     if (score.reason !== 'water' && score.reason !== 'lava') {
       this.stage.addMarker(b.p.x, b.p.z, this.ballColor, score.reason === 'oob' ? 'OB' : `${yards.toFixed(1)}`);
     }

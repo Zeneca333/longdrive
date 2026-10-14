@@ -92,6 +92,7 @@ To host it, turn on GitHub Pages for this repo (Settings → Pages → deploy fr
 | `src/game.js` | The state machine and game loop |
 | `src/ui.js` | Menus: golfer select, tour map, Pro Shop, results |
 | `src/audio.js` | Synthesised sound effects |
+| `src/board.js` | Optional shared leaderboard on claude.ai |
 
 Physics, the swing and the level layouts don't touch three.js, so they're unit tested in Node:
 
@@ -102,3 +103,12 @@ npm test
 One of those tests simulates a pure drive with fair gear on every level, so if you change the physics or a target it will tell you whether the level can still be beaten.
 
 Progress is saved in your browser's `localStorage`.
+
+## Leaderboard
+
+When the game runs as a published claude.ai artifact, it gets a shared leaderboard:
+- Each player's best drive per level goes to a `drives/<player id>` document.
+- The level intro shows the course record.
+- The round summary shows the top five.
+
+`src/board.js` is the only file that knows about it. Anywhere else (locally, GitHub Pages) the board simply doesn't appear.

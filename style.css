@@ -257,6 +257,17 @@ kbd { font-family: var(--display); font-size: 0.85em; background: var(--chalk); 
 .ledger b { font-family: var(--display); font-weight: 400; text-align: right; }
 .ledger .total { border-top: 2px dashed var(--ink); padding-top: 4px; }
 
+/* leaderboard (only on claude.ai) */
+.record { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: var(--paper); border: 3px solid var(--ink); padding: 6px 10px; }
+.board { display: grid; gap: 8px; }
+.board ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: rank; }
+.board li { counter-increment: rank; display: grid; grid-template-columns: 2em minmax(0, 1fr) auto auto; gap: 10px; align-items: center; background: #fff; border: 2px solid var(--ink); padding: 4px 10px; font-weight: 600; }
+.board li::before { content: counter(rank); font-family: var(--display); color: var(--hot); }
+.board li.me { background: var(--gold); }
+.board .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board .club { font-size: 0.85em; color: var(--ink-soft); }
+.board li b { font-family: var(--display); font-weight: 400; font-variant-numeric: tabular-nums; }
+
 /* shop */
 .shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 .ware { background: #fff; border: 3px solid var(--ink); padding: 12px; display: grid; gap: 8px; align-content: start; min-width: 0; }

@@ -1,4 +1,5 @@
 import { Game } from './game.js';
+import { initBoard } from './board.js';
 
 const canvas = document.getElementById('game');
 const game = new Game(canvas);
@@ -14,5 +15,7 @@ const fontsReady = document.fonts
   ? Promise.race([document.fonts.load('64px Bungee'), new Promise((r) => setTimeout(r, 2500))])
   : Promise.resolve();
 fontsReady.catch(() => {}).finally(() => game.start());
+
+initBoard();
 
 window.__game = game;
