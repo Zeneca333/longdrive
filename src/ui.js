@@ -359,7 +359,7 @@ export function renderClub(game, tab = 'level', back = 'menu') {
       <div id="clubPanel" class="club-panel"></div>
       <div class="club-extra">
         <div><h3>Recent bombs</h3><ol class="feed" id="clubRecent"><li class="muted">Loading…</li></ol></div>
-        <div><h3>On the course now</h3><div class="here" id="clubHere"><span class="muted">Just you right now.</span></div></div>
+        ${Board.live ? '<div><h3>On the course now</h3><div class="here" id="clubHere"><span class="muted">Just you right now.</span></div></div>' : ''}
       </div>
       <div class="sheet-foot">
         <button class="btn ghost" id="clubBrag">Copy brag</button>
@@ -376,7 +376,7 @@ export function renderClub(game, tab = 'level', back = 'menu') {
     else drawTour();
   };
   const empty = (msg) => `<p class="muted">${msg}</p>`;
-  const offline = 'Leaderboards live on the published claude.ai version of the game.';
+  const offline = "Couldn't reach the scoreboard. Check your connection and try again.";
 
   function drawDaily() {
     const key = todayKey();

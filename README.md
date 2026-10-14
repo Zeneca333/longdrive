@@ -94,7 +94,7 @@ The page opens straight onto the first tee, and your first tap is your first swi
 | `src/game.js` | The state machine and game loop |
 | `src/ui.js` | Menus: golfer select, tour map, Pro Shop, results |
 | `src/audio.js` | Synthesised sound effects |
-| `src/board.js` | Leaderboards, live ticker and presence on claude.ai (no-op elsewhere) |
+| `src/board.js` | Picks the scoreboard: claude.ai's database and room (`board-claude.js`) or the public table (`board-public.js`) |
 | `src/daily.js` | The Daily Drive: today's course and wind from the date |
 
 Physics, the swing and the level layouts don't touch three.js, so they're unit tested in Node:
@@ -118,7 +118,9 @@ Progress is saved in your browser's `localStorage`.
 - **Daily Drive.** Everyone gets the same course, the same wind for each ball and the same starter gear, with one three-ball attempt per day. The date comes from UTC, so the whole world shares one course. Open it from Menu.
 - **Your flag.** Your best drive on each course stands on the fairway as a flag, so you always know what to beat.
 
-**These light up on the claude.ai version (`src/board.js`):**
+**Public high-score table (standalone link).** Anyone can type a name and post scores, with no sign-in. Scores live in a free [Pantry](https://getpantry.cloud) store (`src/board-public.js`): one JSON basket each for level bests, Daily Drives and tour standings, keyed by a random per-browser player id. Pantry merges each write into the basket, so players never overwrite each other. Like an arcade machine there are no accounts, so a determined person could post a fake score. Everything read back is cleaned and range-checked. The store's id goes in `PUBLIC_SCORES` in `src/config.js`; while it's empty the standalone game plays solo.
+
+**These light up on the claude.ai version (`src/board-claude.js`):**
 - **Clubhouse** (HUD button): today's Daily Drive board, top 10 per level, tour standings (most stars, then longest drive), a feed of recent bombs and who's on the course right now.
 - **Rival flags.** The top three drives on each course show as name flags where those balls stopped.
 - **Live ticker.** When someone online hits a personal best or sets a course record, everyone online sees it. If they took *your* record, you hear about it. Tap **Nice!** to send them kudos.

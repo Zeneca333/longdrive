@@ -270,6 +270,10 @@ export const MPH = 0.4889; // yards per second in one mph
 // Where brag messages point. On claude.ai the page runs inside a frame, so it can't read its own link.
 export const SHARE_URL = 'https://claude.ai/artifact/UfJ3fMHwP2eaCE2Vhs4tbD';
 
+// The public high-score table used by the standalone version (see board-public.js).
+// Empty means no public table: the standalone game then plays solo.
+export const PUBLIC_SCORES = { pantry: '' };
+
 export function starsFor(level, yards) {
   return level.stars.filter((s) => yards >= s).length;
 }
