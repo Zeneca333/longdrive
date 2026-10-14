@@ -1,4 +1,5 @@
-// The game loop and state machine: title → tour map → level intro → aim → swing → flight → result → level end.
+// The game loop and state machine. The page opens straight onto the tee:
+// aim → swing → flight → result (auto) → next ball → level end → next level. Everything else lives behind Menu.
 import { Stage } from './scene.js';
 import { buildCourse, rollWind } from './course.js';
 import { createBall, stepBall, fireRocket, simulate, scoreBall, STEP } from './physics.js';
@@ -8,13 +9,14 @@ import { loadSave, writeSave } from './save.js';
 import { initAudio, sfx, setMuted } from './audio.js';
 import { icon } from './icons.js';
 import * as UI from './ui.js';
-import { submitDrive } from './board.js';
+import { submitDrive, topDrives } from './board.js';
 
 const $ = (id) => document.getElementById(id);
-const FLIGHT_SPEED = 1.45;
+const FLIGHT_SPEED = 1.7;
+const SHOT_CARD_SECS = 2.3;
 const BALL_COLORS = ['#ffc83d', '#ff4f6d', '#7fe3ff', '#9b6bff', '#8dff6a', '#ff9a3d'];
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const MODALS = new Set(['select', 'map', 'shop', 'pause', 'howto', 'end']);
+const MODALS = new Set(['select', 'map', 'shop', 'pause', 'howto']);
 const pct = (m) => ((m - METER_MIN) / (METER_MAX - METER_MIN)) * 100;
 
 export class Game {
@@ -47,15 +49,12 @@ export class Game {
 
   persist() { writeSave(this.save); this.refreshCoins(); }
 
-  // ---------- boot and title ----------
+  // ---------- boot ----------
 
+  // No title menu: land on the tee of your current level with the logo over it. The first tap swings.
   start() {
-    this.course = buildCourse(LEVELS[0]);
-    this.stage.buildLevel(this.course);
-    this.stage.setGolfer(this.save.golfer);
-    this.stage.ball.position.set(0, 0.19, 0);
-    this.stage.setAim(0, false);
-    this.toTitle();
+    const id = Math.max(1, Math.min(this.save.level || 1, this.save.unlocked));
+    this.startLevel(id, { title: true });
     let last = performance.now();
     const loop = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -66,11 +65,6 @@ export class Game {
     requestAnimationFrame(loop);
   }
 
-  toTitle() {
-    this.setState('title');
-    this.showScreen('title');
-  }
-
   showScreen(id) {
     for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
     this.overlay = id;
@@ -78,34 +72,28 @@ export class Game {
 
   setState(s) {
     this.state = s;
-    const playing = ['aim', 'swing', 'flight', 'settle', 'shot'].includes(s);
-    $('hud').hidden = !playing && s !== 'intro';
+    const playing = ['aim', 'swing', 'flight', 'settle', 'shot', 'paused'].includes(s);
+    $('hud').hidden = !playing;
     $('dock').hidden = s !== 'aim';
     $('flightBar').hidden = s !== 'flight';
   }
 
   // ---------- menus ----------
 
-  play() {
-    initAudio();
-    sfx.click();
-    if (!this.save.seenSelect) this.openSelect();
-    else this.openMap();
-  }
+  // Sub-screens open from the menu (back = 'menu') or the level-end card (back = 'end').
+  openSelect(back = 'menu') { UI.renderSelect(this, back); this.showScreen('select'); }
+  openMap(back = 'menu') { UI.renderMap(this, back); this.showScreen('map'); }
+  openHowto(back = 'menu') { UI.renderHowto(this, back); this.showScreen('howto'); }
+  openShop(back = 'menu') { UI.renderShop(this, back); this.showScreen('shop'); }
+  openMenu() { this.hideBanner(); this.clearToast(); UI.renderMenu(this); this.showScreen('pause'); }
 
-  openSelect() { this.setState('menu'); UI.renderSelect(this); this.showScreen('select'); }
-  openMap() {
-    this.setState('menu');
-    if (this.run) this.leaveLevel();
-    UI.renderMap(this);
-    this.showScreen('map');
+  goBack(back) {
+    if (back === 'end') this.showScreen('end');
+    else this.openMenu();
   }
-  openHowto(back) { UI.renderHowto(this, back); this.showScreen('howto'); }
-  openShop(back) { UI.renderShop(this, 'gear', back); this.showScreen('shop'); }
 
   chooseGolfer(id) {
     this.save.golfer = id;
-    this.save.seenSelect = true;
     this.persist();
     this.stage.setGolfer(id);
     sfx.buy();
@@ -141,9 +129,9 @@ export class Game {
 
   // ---------- levels ----------
 
-  startLevel(id) {
-    initAudio();
+  startLevel(id, { title = false } = {}) {
     const level = LEVELS.find((l) => l.id === id);
+    this.paused = null;
     this.course = buildCourse(level);
     this.stage.buildLevel(this.course);
     this.stage.setGolfer(this.save.golfer);
@@ -151,18 +139,26 @@ export class Game {
     this.armed.clear();
     this.aim = 0;
     this.t = 0;
-    this.introT = 0;
+    this.save.level = id;
+    this.persist();
     this.rollWindFor(0);
-    this.resetBallAtTee();
-    UI.renderIntro(this, level);
-    this.showScreen('intro');
-    this.setState('intro');
-    this.refreshHud();
+    this.beginAiming();
+    this.stage.cameraAddress(0, 0, true);
+    this.titleUp = title;
+    if (title) { this.showScreen('title'); $('hud').hidden = true; }
+    else this.showBanner(level);
   }
 
-  leaveLevel() { this.run = null; this.ball = null; this.stage.setScope(null); }
-
   restartLevel() { if (this.run) this.startLevel(this.run.level.id); }
+
+  showBanner(level) {
+    UI.renderBanner(level);
+    $('banner').hidden = false;
+    this.bannerT = 4.5;
+    topDrives(level.id, 1).then((rows) => UI.fillBannerRecord(level, rows));
+  }
+
+  hideBanner() { this.bannerT = 0; $('banner').hidden = true; }
 
   beginAiming() {
     this.showScreen(null);
@@ -175,7 +171,6 @@ export class Game {
     this.refreshHud();
     this.refreshDock();
     this.updateScope();
-    if (r.used === 0 && r.level.id === 1) this.toast('Three taps: start, power, then accuracy in the white zone.');
   }
 
   rollWindFor(ballIndex) {
@@ -220,21 +215,21 @@ export class Game {
         else if (k === 'ArrowDown' || k === 's') { this.cycleShape(-1); e.preventDefault(); }
         else if (/^[1-7]$/.test(k)) this.toggleItem(ITEMS[Number(k) - 1].id);
       }
-      if (k === 'Escape' || k === 'p') { if (this.overlay === 'howto' && this.state === 'paused') this.showScreen('pause'); else this.togglePause(); }
+      if (k === 'Escape' || k === 'p') {
+        if (this.state === 'paused' && this.overlay !== 'pause') this.openMenu();
+        else this.togglePause();
+      }
       if ((k === 'f' || k === 'F') && this.state === 'flight') this.ff = !this.ff;
     });
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
-      if (['aim', 'flight', 'shot', 'intro', 'title'].includes(this.state)) this.press();
+      if (['aim', 'flight', 'shot'].includes(this.state)) this.press();
     });
-    $('playBtn').onclick = () => this.play();
-    $('howBtn').onclick = () => { initAudio(); this.openHowto('title'); };
     $('aimL').onclick = () => this.nudgeAim(-1);
     $('aimR').onclick = () => this.nudgeAim(1);
     $('shapeBtn').onclick = () => this.cycleShape(1);
     $('pauseBtn').onclick = () => this.togglePause();
     $('rocketBtn').onclick = (e) => { e.stopPropagation(); this.fire(); };
-    $('ffBtn').onclick = (e) => { e.stopPropagation(); this.ff = !this.ff; this.refreshFlightBar(); };
     let holdTimer = null;
     for (const id of ['aimL', 'aimR']) {
       const el = $(id);
@@ -247,11 +242,13 @@ export class Game {
   press() {
     initAudio();
     switch (this.state) {
-      case 'title': this.play(); break;
-      case 'intro': this.beginAiming(); break;
-      case 'aim': this.swingPress(); break;
+      case 'aim':
+        if (this.titleUp) { this.titleUp = false; this.showScreen(null); $('hud').hidden = false; }
+        this.swingPress();
+        break;
       case 'flight': if (!this.fire()) { this.ff = !this.ff; this.refreshFlightBar(); } break;
       case 'shot': this.nextBall(); break;
+      case 'end': this.endPrimary(); break;
     }
   }
 
@@ -302,8 +299,7 @@ export class Game {
     if (['aim', 'flight', 'settle', 'shot'].includes(this.state)) {
       this.paused = { state: this.state, overlay: this.overlay };
       this.setState('paused');
-      UI.renderPause(this);
-      this.showScreen('pause');
+      this.openMenu();
     } else if (this.state === 'paused') {
       this.resume();
     }
@@ -311,9 +307,18 @@ export class Game {
 
   resume() {
     const p = this.paused;
+    if (!p) return;
     this.paused = null;
     this.setState(p.state);
-    this.showScreen(p.overlay === 'pause' ? null : p.overlay);
+    this.showScreen(p.overlay === 'title' ? null : p.overlay);
+    this.titleUp = false;
+    $('hud').hidden = false;
+    // A new golfer or new gear from the menu applies to the very next swing.
+    if (p.state === 'aim' && this.meter.state === 'idle') {
+      this.meter = this.makeMeter();
+      this.refreshDock();
+      this.refreshHud();
+    }
   }
 
   // ---------- the swing ----------
@@ -323,7 +328,7 @@ export class Game {
     const before = m.state;
     m.press();
     sfx.tick();
-    if (before === 'idle') this.stage.setAim(this.aim, false);
+    if (before === 'idle') { this.stage.setAim(this.aim, false); this.hideBanner(); }
     if (m.state === 'done') this.startDownswing();
     this.refreshHint();
   }
@@ -391,26 +396,14 @@ export class Game {
     this.clock += dt;
     const st = this.state;
     let simDt = dt;
-    if (st === 'flight') simDt = dt * FLIGHT_SPEED * (this.ff ? 3 : 1);
+    // Rolling along the ground is the least exciting part, so it plays at double speed.
+    if (st === 'flight') simDt = dt * FLIGHT_SPEED * (this.ff ? 3 : 1) * (this.ball?.mode === 'roll' ? 2 : 1);
     if (st !== 'paused') {
       this.t += simDt;
       this.course.update(this.t, simDt);
     }
 
     switch (st) {
-      case 'title':
-      case 'menu':
-        this.stage.cameraOrbit({ x: 0, z: 0 }, this.clock, 8.5, 3.2);
-        this.idleGolfer(dt);
-        break;
-      case 'intro': {
-        this.introT += dt;
-        const u = Math.min(1, this.introT / 3.6);
-        if (u < 1) this.stage.cameraFlyover(easeInOut(u), this.course.level.stars[0] + 60);
-        else this.stage.cameraAddress(this.aim, dt);
-        this.idleGolfer(dt);
-        break;
-      }
       case 'aim':
         this.meter.update(dt);
         if (this.meter.state === 'power') this.swingAngle = -Math.min(1, this.meter.pos / 1.15) * 2.75;
@@ -441,6 +434,8 @@ export class Game {
         break;
       case 'shot':
         if (this.ball) this.stage.cameraOrbit(this.ball.p, this.clock, 16, 6.5);
+        this.shotT -= dt;
+        if (this.shotT <= 0) this.nextBall();
         break;
       case 'end':
         this.stage.cameraOrbit(this.endFocus || { x: 0, z: 0 }, this.clock, 16, 6);
@@ -449,6 +444,7 @@ export class Game {
 
     if (this.stage.golfer) this.stage.golfer.setSwing(this.swingAngle || 0);
     this.stage.sync(this.t, st === 'flight' ? simDt : dt, this.ball);
+    if (this.bannerT > 0) { this.bannerT -= dt; if (this.bannerT <= 0) this.hideBanner(); }
     if (this.toastTimer > 0) { this.toastTimer -= dt; if (this.toastTimer <= 0) $('toast').classList.remove('show'); }
     this.stage.render();
   }
@@ -478,7 +474,7 @@ export class Game {
     this.stage.cameraFollow(b, dt, !!b.carry && b.p.y < 3);
     if (b.mode === 'rest' || b.mode === 'lost') {
       this.setState('settle');
-      this.settleT = b.mode === 'lost' ? 1.4 : 0.9;
+      this.settleT = b.mode === 'lost' ? 1.0 : 0.45;
     }
   }
 
@@ -646,19 +642,22 @@ export class Game {
     else if (yards >= target) comment = pick(LINES.big);
     else if (yards < target * 0.75) comment = pick(LINES.short);
     else comment = `${(target - yards).toFixed(1)} yards short of the target. So close.`;
+    if (score.reason !== 'oob') this.toast(comment, SHOT_CARD_SECS);
 
     UI.renderShot(this, {
-      yards, reason: score.reason, res, carry: b.carry ? Math.max(0, -b.carry.z) : 0, apex: b.apex,
-      newBest: yards > prevBest && yards > 0, beatTarget: yards >= target, distCoins, comment,
-      ballsLeft: r.balls - r.used, ballColor: this.ballColor,
+      yards, reason: score.reason, res, carry: b.carry ? Math.max(0, -b.carry.z) : 0,
+      newBest: yards > prevBest && yards > 0, beatTarget: yards >= target, distCoins,
+      ballsLeft: r.balls - r.used,
     });
     this.showScreen('shot');
     this.setState('shot');
+    this.shotT = SHOT_CARD_SECS;
     this.refreshHud();
   }
 
   nextBall() {
     if (this.state !== 'shot') return;
+    this.clearToast();
     $('meter').classList.remove('pure');
     if (this.run.used < this.run.balls) this.beginAiming();
     else this.finishLevel();
@@ -686,9 +685,18 @@ export class Game {
     const unlockedRex = firstClear && GOLFERS.some((g) => g.unlockAfter === lv.id);
     if (cleared) { sfx.fanfare(); this.stage.cheer = 4; } else sfx.groan();
     this.endFocus = { x: 0, z: -Math.max(30, r.best * 0.6) };
-    UI.renderEnd(this, { level: lv, best: r.best, earned, cleared, firstClear, bonus, starBonus, coins: r.coins, unlockedRex, results: r.results });
+    const next = LEVELS.find((l) => l.id === lv.id + 1);
+    this.endAction = cleared && next ? next.id : null;
+    const roundCoins = r.coins.dist + r.coins.pickups + r.coins.crates + bonus + starBonus;
+    UI.renderEnd(this, { level: lv, best: r.best, earned, cleared, firstClear, roundCoins, unlockedRex, next });
     this.showScreen('end');
     this.setState('end');
+  }
+
+  // Space, Enter or the big button on the level-end card: next level if cleared, otherwise go again.
+  endPrimary() {
+    if (this.endAction) this.startLevel(this.endAction);
+    else this.restartLevel();
   }
 
   // ---------- HUD helpers ----------
@@ -734,6 +742,8 @@ export class Game {
   }
 
   refreshDock() {
+    // Level 1 is just you and the meter. Aim and shot shape show up from level 2.
+    $('dock').classList.toggle('basic', this.run?.level.id === 1);
     $('aimVal').textContent = `${this.aim > 0 ? 'R ' : this.aim < 0 ? 'L ' : ''}${Math.abs(this.aim)}°`;
     $('shapeVal').textContent = SHAPES[this.shapeIdx].name;
     const tray = $('tray');
@@ -752,8 +762,9 @@ export class Game {
   refreshHint() {
     const m = this.meter;
     const verbose = this.run?.level.id <= 2;
+    const touch = window.matchMedia?.('(pointer: coarse)').matches;
     const txt = !m || m.state === 'idle'
-      ? `<b>Tap</b> or <b>Space</b> to start your swing`
+      ? (touch ? '<b>Tap</b> to start your swing' : '<b>Tap</b> or <b>Space</b> to start your swing')
       : m.state === 'power'
         ? `<b>Tap</b> to set power${verbose ? '. Past 100 is an overswing' : ''}`
         : `<b>Tap</b> as the needle crosses the <b>white zone</b>`;
@@ -789,7 +800,7 @@ export class Game {
   refreshFlightBar() {
     const b = this.ball;
     $('rocketBtn').hidden = !(b?.rocket && !b.rocket.firing);
-    $('ffBtn').textContent = this.ff ? 'Normal speed' : 'Fast forward';
+    $('ffHint').textContent = this.ff ? 'Fast forward · tap for normal speed' : 'Tap to speed up';
   }
 
   updateScope() {
@@ -813,7 +824,10 @@ export class Game {
     setTimeout(() => el.remove(), 1300);
   }
 
+  clearToast() { this.toastTimer = 0; $('toast').classList.remove('show'); }
+
   toast(text, secs = 2.6) {
+    if (this.bannerT > 0) this.hideBanner();
     const el = $('toast');
     el.textContent = text;
     el.classList.add('show');
@@ -821,4 +835,3 @@ export class Game {
   }
 }
 
-function easeInOut(u) { return u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; }

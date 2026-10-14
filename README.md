@@ -20,6 +20,8 @@ To host it, turn on GitHub Pages for this repo (Settings → Pages → deploy fr
 
 ## How to play
 
+The page opens straight onto the first tee, and your first tap is your first swing. Each shot's result shows for a couple of seconds, then you're back on the tee. Clear a level and the big button (or `Space`) takes you to the next one. Everything else lives behind **Menu**: levels, the Pro Shop, golfers, sound and how to play. Coming back later drops you on the level you were last playing.
+
 **The swing is the classic three-click meter:**
 
 1. **Tap** (click, tap or `Space`) to start. The needle races right.
@@ -28,18 +30,18 @@ To host it, turn on GitHub Pages for this repo (Settings → Pages → deploy fr
 
 **The grid.** Like real long drive contests, the ball has to finish inside the grid (the white lines) or it scores zero. You get three balls per level and your best one counts. Beat the target for one star, then hit the next two marks for two and three stars.
 
-**Shot shape** (`↑` `↓`):
+**Shot shape** (`↑` `↓`, from level 2):
 - **Stinger:** low, with topspin. Use it into a headwind.
 - **Stock:** your everyday drive.
 - **Sky Ball:** high and floaty. Use it with a tailwind.
 
-**Aim** with `←` `→`, which is handy for curving around hazards or lining up a boost ring.
+**Aim** with `←` `→` (also from level 2), which is handy for curving around hazards or lining up a boost ring.
 
 ### Getting stuff
 
 - **Coins** float along the flight paths. You also earn coins for distance, for clearing a level and for new stars.
 - **Mystery crates** usually help: a turbo boost, feather-light gravity, a coin shower or a free power-up. One in ten is an anvil.
-- **Sal's Pro Shop** (between rounds) sells permanent gear and one-shot power-ups.
+- **Sal's Pro Shop** (Menu, or the link on the level-end card) sells permanent gear and one-shot power-ups.
 
 | Gear | What it does |
 | --- | --- |

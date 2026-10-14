@@ -719,14 +719,6 @@ export class Stage {
     this.focus.set(0, 0, -10);
   }
 
-  cameraFlyover(u, len) {
-    const z = -len * (1 - u) * 0.95;
-    const pos = new THREE.Vector3(Math.sin(u * 3) * 20, 34 - u * 22, z + 40);
-    const look = new THREE.Vector3(0, 0, z - 60);
-    this.moveCamera(pos, look, 1);
-    this.focus.set(0, 0, z - 20);
-  }
-
   cameraOrbit(center, t, radius = 12, height = 4.5) {
     const pos = new THREE.Vector3(center.x + Math.sin(t * 0.25) * radius, height, center.z + Math.cos(t * 0.25) * radius);
     this.moveCamera(pos, new THREE.Vector3(center.x, 1.2, center.z), 0.08);

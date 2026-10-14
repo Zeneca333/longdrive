@@ -32,7 +32,7 @@
         <div class="wind-word" id="windWord">Calm</div>
       </div>
       <div class="panel coins"><span id="coinIcon"></span><b id="hudCoins">0</b></div>
-      <button class="sq-btn" id="pauseBtn" aria-label="Pause">II</button>
+      <button class="panel menu-btn" id="pauseBtn" aria-label="Menu">Menu</button>
     </div>
   </header>
 
@@ -47,7 +47,6 @@
         <div class="m-lock" id="mLock"></div>
         <div class="m-needle" id="mNeedle"></div>
       </div>
-      <div class="m-legend"><span>Slice</span><span>Hook</span><span class="m-gap"></span><span>Power</span><span class="m-over-lbl">Over</span></div>
     </div>
     <div class="dock-row">
       <div class="panel aim">
@@ -62,8 +61,10 @@
 
   <div id="flightBar" hidden>
     <button class="btn hot" id="rocketBtn" hidden>Fire rocket</button>
-    <button class="btn ghost" id="ffBtn">Fast forward</button>
+    <span class="ff-hint" id="ffHint">Tap to speed up</span>
   </div>
+
+  <div id="banner" hidden></div>
 
   <div id="pop" aria-live="polite"></div>
   <div id="toast" aria-live="polite"></div>
@@ -71,21 +72,13 @@
   <section class="screen" id="title">
     <div class="title-top">
       <h1 class="logo"><span class="l1">Long Drive</span><span class="l2">Insanity</span></h1>
-      <p class="tagline">Three clicks. Three balls. One very silly grid.</p>
-    </div>
-    <div class="title-wrap">
-      <div class="title-btns">
-        <button class="btn big" id="playBtn">Tee off</button>
-        <button class="btn ghost" id="howBtn">How to play</button>
-      </div>
-      <p class="title-foot">Click, tap or press <kbd>Space</kbd> to swing</p>
+      <p class="tagline">Tap anywhere to swing</p>
     </div>
   </section>
 
   <section class="screen modal" id="howto" hidden></section>
   <section class="screen modal" id="select" hidden></section>
   <section class="screen modal" id="map" hidden></section>
-  <section class="screen" id="intro" hidden></section>
   <section class="screen" id="shot" hidden></section>
   <section class="screen modal" id="end" hidden></section>
   <section class="screen modal" id="shop" hidden></section>
