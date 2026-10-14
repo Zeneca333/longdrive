@@ -554,6 +554,18 @@ export class Stage {
     }
   }
 
+  // A leaderboard flag: a tall pole where someone's ball stopped, with their name floating above it.
+  addRivalFlag(x, z, label, color) {
+    const f = M.makeFlag(color, 6);
+    f.position.set(x, 0, z);
+    this.world.add(f);
+    this.markers.push(f);
+    const s = M.makeSign(label, { width: 6, height: 1.3, post: 6.6, floating: true, w: 576, h: 124, size: 60, bg: color });
+    s.position.set(x, 0, z);
+    this.world.add(s);
+    this.markers.push(s);
+  }
+
   // ---------- per-frame ----------
 
   sync(t, dt, ballState) {

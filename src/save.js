@@ -9,6 +9,8 @@ export function freshSave() {
     unlocked: 1,
     stars: {},
     best: {},
+    bestX: {},
+    daily: null,
     gear: { driver: 0, ball: 0, grip: 0 },
     items: { rocket: 0, scope: 0, butter: 0, calm: 0, bouncy: 0, moon: 0, mulligan: 0 },
     muted: false,

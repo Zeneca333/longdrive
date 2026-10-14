@@ -4,19 +4,21 @@ import { Stage } from './scene.js';
 import { buildCourse, rollWind } from './course.js';
 import { createBall, stepBall, fireRocket, simulate, scoreBall, STEP } from './physics.js';
 import { SwingMeter, makeLaunch, SHAPES, METER_MIN, METER_MAX, BASE_SWEET } from './swing.js';
-import { GOLFERS, GEAR, ITEMS, LEVELS, LINES, starsFor } from './config.js';
+import { GOLFERS, GEAR, ITEMS, LEVELS, LINES, SHARE_URL, starsFor } from './config.js';
 import { loadSave, writeSave } from './save.js';
 import { initAudio, sfx, setMuted } from './audio.js';
 import { icon } from './icons.js';
 import * as UI from './ui.js';
-import { submitDrive, topDrives } from './board.js';
+import * as Board from './board.js';
+import { todayKey, dailyLevel, dailyWind, prettyDate } from './daily.js';
 
 const $ = (id) => document.getElementById(id);
 const FLIGHT_SPEED = 1.7;
 const SHOT_CARD_SECS = 2.3;
 const BALL_COLORS = ['#ffc83d', '#ff4f6d', '#7fe3ff', '#9b6bff', '#8dff6a', '#ff9a3d'];
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const MODALS = new Set(['select', 'map', 'shop', 'pause', 'howto']);
+const MODALS = new Set(['select', 'map', 'shop', 'pause', 'howto', 'club']);
+const RIVAL_COLORS = ['#ffc83d', '#c9ced6', '#d9935a'];
 const pct = (m) => ((m - METER_MIN) / (METER_MAX - METER_MIN)) * 100;
 
 export class Game {
@@ -39,11 +41,15 @@ export class Game {
     this.toastTimer = 0;
     this.bindInput();
     $('coinIcon').innerHTML = icon('coin', 22);
+    $('clubIcon').innerHTML = icon('trophy', 22);
+    Board.boardReady().then((ok) => { this.social = ok; $('clubBtn').hidden = !ok; this.refreshClubBtn(); });
+    Board.onSocial((ev) => this.onSocial(ev));
   }
 
   get golfer() { return GOLFERS.find((g) => g.id === this.save.golfer) || GOLFERS[0]; }
   get gear() {
-    const g = this.save.gear;
+    // The Daily Drive is starter gear for everyone, so the board measures swings, not wallets.
+    const g = this.run?.level.daily ? { driver: 0, ball: 0, grip: 0 } : this.save.gear;
     return { driver: GEAR.driver.levels[g.driver], ball: GEAR.ball.levels[g.ball], grip: GEAR.grip.levels[g.grip] };
   }
 
@@ -87,8 +93,22 @@ export class Game {
   openShop(back = 'menu') { UI.renderShop(this, back); this.showScreen('shop'); }
   openMenu() { this.hideBanner(); this.clearToast(); UI.renderMenu(this); this.showScreen('pause'); }
 
+  // The Clubhouse can open mid-game (from the HUD), from the menu or from a level-end card.
+  openClub(tab = 'level', back = null) {
+    if (['aim', 'flight', 'settle', 'shot'].includes(this.state)) {
+      this.paused = { state: this.state, overlay: this.overlay };
+      this.setState('paused');
+      back = back || 'play';
+    }
+    this.hideBanner();
+    this.clearToast();
+    UI.renderClub(this, tab, back || 'menu');
+    this.showScreen('club');
+  }
+
   goBack(back) {
     if (back === 'end') this.showScreen('end');
+    else if (back === 'play') this.resume();
     else this.openMenu();
   }
 
@@ -131,31 +151,73 @@ export class Game {
 
   startLevel(id, { title = false } = {}) {
     const level = LEVELS.find((l) => l.id === id);
-    this.paused = null;
-    this.course = buildCourse(level);
-    this.stage.buildLevel(this.course);
-    this.stage.setGolfer(this.save.golfer);
-    this.run = { level, balls: 3, used: 0, results: [], best: 0, coins: { dist: 0, pickups: 0, crates: 0 } };
-    this.armed.clear();
-    this.aim = 0;
-    this.t = 0;
     this.save.level = id;
     this.persist();
-    this.rollWindFor(0);
-    this.beginAiming();
-    this.stage.cameraAddress(0, 0, true);
+    this.loadRun(level, buildCourse(level));
     this.titleUp = title;
     if (title) { this.showScreen('title'); $('hud').hidden = true; }
     else this.showBanner(level);
   }
 
-  restartLevel() { if (this.run) this.startLevel(this.run.level.id); }
+  // Same course and wind for everyone today, one three-ball attempt. Leaving mid-way keeps your place.
+  startDaily() {
+    const key = todayKey();
+    const prev = this.save.daily?.date === key ? this.save.daily : null;
+    if (prev && prev.used >= 3) { this.openClub('daily', this.overlay === 'end' ? 'end' : 'menu'); return; }
+    const level = dailyLevel(key);
+    this.loadRun(level, buildCourse(level, { seed: level.seed }), { used: prev?.used || 0, best: prev?.best || 0 });
+    this.showBanner(level);
+  }
+
+  loadRun(level, course, { used = 0, best = 0 } = {}) {
+    this.paused = null;
+    this.titleUp = false;
+    this.course = course;
+    this.stage.buildLevel(course);
+    this.stage.setGolfer(this.save.golfer);
+    this.run = { level, balls: 3, used, results: [], best, coins: { dist: 0, pickups: 0, crates: 0 } };
+    this.armed.clear();
+    this.aim = 0;
+    this.t = 0;
+    this.windBall = null;
+    this.leader = 0;
+    this.beginAiming();
+    this.stage.cameraAddress(0, 0, true);
+    this.placeRivalFlags();
+    Board.setPresence({ lv: level.daily ? 0 : level.id, daily: !!level.daily });
+  }
+
+  restartLevel() {
+    if (this.run?.level.daily) this.startDaily();
+    else if (this.run) this.startLevel(this.run.level.id);
+  }
 
   showBanner(level) {
-    UI.renderBanner(level);
+    UI.renderBanner(level, this);
     $('banner').hidden = false;
     this.bannerT = 4.5;
-    topDrives(level.id, 1).then((rows) => UI.fillBannerRecord(level, rows));
+    const rows = level.daily ? Board.dailyTop(level.date) : Board.levelTop(level.id, 1);
+    rows.then((r) => UI.fillBannerRecord(level, r));
+  }
+
+  // Flags out on the fairway: your own best, plus the top three on the leaderboard where their balls stopped.
+  placeRivalFlags() {
+    const course = this.course;
+    const level = this.run.level;
+    const own = level.daily
+      ? (this.save.daily?.date === level.date ? { yards: this.save.daily.best, x: this.save.daily.bestX || 0 } : null)
+      : { yards: this.save.best[level.id] || 0, x: this.save.bestX?.[level.id] || 0 };
+    if (own?.yards > 0) this.stage.addRivalFlag(own.x, -own.yards, `You ${own.yards.toFixed(1)}`, '#ff4f6d');
+    const rows = level.daily ? Board.dailyTop(level.date) : Board.levelTop(level.id, 3);
+    rows.then((r) => {
+      if (!r || this.course !== course) return;
+      r.slice(0, 3).forEach((row, i) => {
+        if (row.isMe) return;
+        this.stage.addRivalFlag(row.x || 0, -row.yards, `${i + 1}. ${shortName(row.name)} ${row.yards.toFixed(1)}`, RIVAL_COLORS[i]);
+      });
+      this.leader = r[0]?.yards || 0;
+      this.refreshHud();
+    });
   }
 
   hideBanner() { this.bannerT = 0; $('banner').hidden = true; }
@@ -174,7 +236,8 @@ export class Game {
   }
 
   rollWindFor(ballIndex) {
-    this.wind = rollWind(this.run.level);
+    const lv = this.run.level;
+    this.wind = lv.daily ? dailyWind(lv, ballIndex) : rollWind(lv);
     this.windBall = ballIndex;
     this.course.env.wind = { x: this.wind.x, z: this.wind.z };
   }
@@ -229,6 +292,7 @@ export class Game {
     $('aimR').onclick = () => this.nudgeAim(1);
     $('shapeBtn').onclick = () => this.cycleShape(1);
     $('pauseBtn').onclick = () => this.togglePause();
+    $('clubBtn').onclick = () => { sfx.click(); this.openClub(this.run?.level.daily ? 'daily' : 'level'); };
     $('rocketBtn').onclick = (e) => { e.stopPropagation(); this.fire(); };
     let holdTimer = null;
     for (const id of ['aimL', 'aimR']) {
@@ -269,7 +333,7 @@ export class Game {
   }
 
   toggleItem(id) {
-    if (this.state !== 'aim' || this.meter.state !== 'idle') return;
+    if (this.state !== 'aim' || this.meter.state !== 'idle' || this.run.level.daily) return;
     const have = this.save.items[id] || 0;
     if (id === 'mulligan') {
       if (!have) { sfx.nope(); return; }
@@ -620,7 +684,11 @@ export class Game {
     r.used++;
     r.results.push({ yards, reason: score.reason, label: res.label });
     r.best = Math.max(r.best, yards);
-    const target = r.level.stars[0];
+    const target = r.level.daily ? this.leader || r.level.stars[0] : r.level.stars[0];
+    if (r.level.daily) {
+      const prev = this.save.daily?.date === r.level.date ? this.save.daily : {};
+      this.save.daily = { date: r.level.date, used: r.used, best: r.best, bestX: !score.reason && yards > prevBest ? b.p.x : prev.bestX || 0 };
+    }
     const distCoins = Math.round(Math.floor(yards / 10) * this.golfer.coinMult);
     r.coins.dist += distCoins;
     this.save.coins += distCoins;
@@ -631,7 +699,7 @@ export class Game {
     else if (yards > prevBest && yards > 0) { sfx.cheer(false); this.stage.cheer = 2; }
     else if (yards > 0 && yards < target * 0.7) sfx.groan();
 
-    if (!score.reason) submitDrive(r.level.id, yards, this.save.golfer);
+    if (!score.reason) this.postDrive(yards, b.p.x);
     if (score.reason !== 'water' && score.reason !== 'lava') {
       this.stage.addMarker(b.p.x, b.p.z, this.ballColor, score.reason === 'oob' ? 'OB' : `${yards.toFixed(1)}`);
     }
@@ -655,6 +723,26 @@ export class Game {
     this.refreshHud();
   }
 
+  // Your best drives go to your local save and, on claude.ai, to the shared boards.
+  postDrive(yards, x) {
+    const r = this.run, lv = r.level, s = this.save;
+    if (lv.daily) {
+      Board.recordDaily(lv.date, yards, x, s.golfer);
+      return;
+    }
+    if (yards > (s.best[lv.id] || 0)) {
+      s.best[lv.id] = yards;
+      s.bestX = { ...s.bestX, [lv.id]: Math.round(x * 10) / 10 };
+      this.persist();
+    }
+    Board.recordLevelDrive(lv.id, yards, x, s.golfer).then((res) => {
+      if (!res?.record || this.run !== r) return;
+      this.pop('COURSE RECORD!', 'green');
+      sfx.fanfare();
+      this.ticker(`You hold the course record on ${lv.name}. For now.`);
+    });
+  }
+
   nextBall() {
     if (this.state !== 'shot') return;
     this.clearToast();
@@ -664,6 +752,7 @@ export class Game {
   }
 
   finishLevel() {
+    if (this.run.level.daily) return this.finishDaily();
     const r = this.run;
     const lv = r.level;
     const s = this.save;
@@ -682,6 +771,7 @@ export class Game {
     s.best[lv.id] = Math.max(s.best[lv.id] || 0, r.best);
     s.coins += bonus + starBonus;
     this.persist();
+    Board.recordStars(Object.values(s.stars).reduce((a, b) => a + b, 0));
     const unlockedRex = firstClear && GOLFERS.some((g) => g.unlockAfter === lv.id);
     if (cleared) { sfx.fanfare(); this.stage.cheer = 4; } else sfx.groan();
     this.endFocus = { x: 0, z: -Math.max(30, r.best * 0.6) };
@@ -693,10 +783,100 @@ export class Game {
     this.setState('end');
   }
 
+  finishDaily() {
+    const r = this.run;
+    const bonus = 50;
+    this.save.coins += bonus;
+    this.persist();
+    sfx.fanfare();
+    this.stage.cheer = 4;
+    this.endFocus = { x: 0, z: -Math.max(30, r.best * 0.6) };
+    this.endAction = 'tour';
+    const roundCoins = r.coins.dist + r.coins.pickups + r.coins.crates + bonus;
+    UI.renderDailyEnd(this, { level: r.level, best: r.best, roundCoins });
+    this.showScreen('end');
+    this.setState('end');
+  }
+
   // Space, Enter or the big button on the level-end card: next level if cleared, otherwise go again.
   endPrimary() {
-    if (this.endAction) this.startLevel(this.endAction);
+    if (this.endAction === 'tour') this.startLevel(this.save.level || 1);
+    else if (this.endAction) this.startLevel(this.endAction);
     else this.restartLevel();
+  }
+
+  // ---------- social ----------
+
+  async onSocial(ev) {
+    if (ev.type === 'peers') { this.refreshClubBtn(); return; }
+    const people = await Board.names([ev.by]);
+    const name = people[ev.by]?.name || 'Someone';
+    if (ev.type === 'kudos') {
+      sfx.crate();
+      this.ticker(`${name} says: nice drive!`);
+      return;
+    }
+    const where = ev.daily ? "today's Daily Drive" : LEVELS[ev.lv - 1]?.name || 'the tour';
+    const yds = ev.yds.toFixed(1);
+    const text = ev.tookMine
+      ? `${name} just took your course record on ${where} with ${yds} yds!`
+      : ev.record
+        ? `${name} set a new course record on ${where}: ${yds} yds`
+        : `${name} just hit ${yds} yds on ${where}`;
+    if (ev.tookMine) sfx.bad(); else sfx.tick();
+    this.ticker(text, ev.by);
+  }
+
+  ticker(text, kudosTo = null) {
+    const el = $('ticker');
+    $('tickerText').textContent = text;
+    const btn = $('tickerKudos');
+    btn.hidden = !kudosTo;
+    btn.disabled = false;
+    btn.textContent = 'Nice!';
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      Board.sendKudos(kudosTo);
+      btn.textContent = 'Sent';
+      btn.disabled = true;
+      sfx.click();
+    };
+    el.hidden = false;
+    el.classList.remove('in');
+    void el.offsetWidth;
+    el.classList.add('in');
+    this.hideBanner();
+    clearTimeout(this.tickerTimer);
+    this.tickerTimer = setTimeout(() => { el.hidden = true; }, 7000);
+  }
+
+  refreshClubBtn() {
+    const n = Board.onlineCount();
+    const live = $('clubLive');
+    live.hidden = !n;
+    live.textContent = `${n} on`;
+  }
+
+  // Copy a brag line for the group chat. Clipboard access needs the click that called this.
+  brag(text) {
+    const url = window.claude?.use ? SHARE_URL : location.href.split('#')[0];
+    const full = `${text} ${url}`;
+    const done = () => { sfx.buy(); this.toast('Copied. Paste it in the group chat.', 2.2); };
+    const fallback = () => UI.showCopyFallback(full);
+    try {
+      navigator.clipboard.writeText(full).then(done, fallback);
+    } catch {
+      fallback();
+    }
+  }
+
+  bragLine() {
+    const s = this.save;
+    const r = this.run;
+    if (r?.level.daily) return `Daily Drive ${prettyDate(r.level.date)}: ${r.best.toFixed(1)} yds on ${r.level.name.replace('Daily Drive: ', '')} in LONG DRIVE INSANITY. Same course, same wind, your move:`;
+    const stars = Object.values(s.stars).reduce((a, b) => a + b, 0);
+    const best = Math.max(0, ...Object.values(s.best));
+    return `I'm ${stars} stars deep in LONG DRIVE INSANITY with a ${best.toFixed(1)}-yard bomb. Your move:`;
   }
 
   // ---------- HUD helpers ----------
@@ -704,8 +884,9 @@ export class Game {
   refreshHud() {
     const r = this.run;
     if (!r) return;
-    $('hudLevel').textContent = `${r.level.id} · ${r.level.name}`;
-    $('hudTarget').textContent = `${r.level.stars[0]}`;
+    $('hudLevel').textContent = r.level.daily ? r.level.name : `${r.level.id} · ${r.level.name}`;
+    $('hudTargetLbl').textContent = r.level.daily ? 'Leader' : 'Target';
+    $('hudTarget').textContent = r.level.daily ? (this.leader ? this.leader.toFixed(1) : '-') : `${r.level.stars[0]}`;
     $('hudBest').textContent = r.best ? r.best.toFixed(1) : '-';
     const balls = [];
     for (let i = 0; i < r.balls; i++) balls.push(`<i class="${i < r.used ? 'used' : i === r.used && this.state !== 'shot' ? 'now' : ''}"></i>`);
@@ -748,7 +929,8 @@ export class Game {
     $('shapeVal').textContent = SHAPES[this.shapeIdx].name;
     const tray = $('tray');
     // Only power-ups you own show up here; the Pro Shop lists the rest.
-    tray.innerHTML = ITEMS.filter((it) => this.save.items[it.id] > 0 || this.armed.has(it.id)).map((it) => {
+    const daily = this.run?.level.daily;
+    tray.innerHTML = ITEMS.filter((it) => !daily && (this.save.items[it.id] > 0 || this.armed.has(it.id))).map((it) => {
       const n = this.save.items[it.id] || 0;
       const on = this.armed.has(it.id);
       return `<button class="item ${on ? 'armed' : ''}" data-id="${it.id}" ${n ? '' : 'disabled'} title="${it.name} (${it.key}): ${it.desc}" aria-pressed="${on}">${icon(it.id, 30)}<span class="n">${n}</span><span class="k">${it.key}</span></button>`;
@@ -835,3 +1017,7 @@ export class Game {
   }
 }
 
+function shortName(name) {
+  const first = String(name).trim().split(/\s+/)[0] || 'Someone';
+  return first.length > 12 ? `${first.slice(0, 11)}…` : first;
+}

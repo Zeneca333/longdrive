@@ -267,6 +267,9 @@ export const LEVELS = [
 
 export const MPH = 0.4889; // yards per second in one mph
 
+// Where brag messages point. On claude.ai the page runs inside a frame, so it can't read its own link.
+export const SHARE_URL = 'https://claude.ai/artifact/UfJ3fMHwP2eaCE2Vhs4tbD';
+
 export function starsFor(level, yards) {
   return level.stars.filter((s) => yards >= s).length;
 }

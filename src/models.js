@@ -513,7 +513,13 @@ export function textSprite(text, { color = '#1b2340', bg = '#fff8ec', w = 256, h
   x.fillStyle = border; x.fillRect(0, 0, w, h);
   x.fillStyle = bg; x.fillRect(8, 8, w - 16, h - 16);
   x.fillStyle = color;
-  x.font = `${size}px ${font}, Impact, sans-serif`;
+  // Shrink long labels (player names) until they fit the board.
+  let px = size;
+  x.font = `${px}px ${font}, Impact, sans-serif`;
+  while (px > 18 && x.measureText(text).width > w - 36) {
+    px -= 2;
+    x.font = `${px}px ${font}, Impact, sans-serif`;
+  }
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   x.fillText(text, w / 2, h / 2 + 4);
@@ -527,8 +533,10 @@ export function makeSign(text, opts = {}) {
   const g = new THREE.Group();
   const v = new Vox(1);
   const w = opts.width || 5, h = opts.height || 2.5, post = opts.post ?? 3;
-  v.box(-w / 3, post / 2, -0.15, 0.3, post, 0.3, '#5a3a22').box(w / 3, post / 2, -0.15, 0.3, post, 0.3, '#5a3a22');
-  g.add(v.mesh());
+  if (!opts.floating) {
+    v.box(-w / 3, post / 2, -0.15, 0.3, post, 0.3, '#5a3a22').box(w / 3, post / 2, -0.15, 0.3, post, 0.3, '#5a3a22');
+    g.add(v.mesh());
+  }
   const board = new THREE.Mesh(
     new THREE.PlaneGeometry(w, h),
     new THREE.MeshBasicMaterial({ map: textSprite(text, opts) }),

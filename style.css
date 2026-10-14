@@ -275,16 +275,8 @@ kbd { font-family: var(--display); font-size: 0.85em; background: var(--chalk); 
 .end-hero .big-stars .px:nth-child(3) { animation-delay: 0.5s; }
 @keyframes starIn { from { transform: scale(0) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
 
-/* leaderboard (only on claude.ai) */
 .record { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: var(--paper); border: 3px solid var(--ink); padding: 6px 10px; }
 .board { display: grid; gap: 8px; }
-.board ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: rank; }
-.board li { counter-increment: rank; display: grid; grid-template-columns: 2em minmax(0, 1fr) auto auto; gap: 10px; align-items: center; background: #fff; border: 2px solid var(--ink); padding: 4px 10px; font-weight: 600; }
-.board li::before { content: counter(rank); font-family: var(--display); color: var(--hot); }
-.board li.me { background: var(--gold); }
-.board .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.board .club { font-size: 0.85em; color: var(--ink-soft); }
-.board li b { font-family: var(--display); font-weight: 400; font-variant-numeric: tabular-nums; }
 
 /* shop */
 .shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
@@ -323,3 +315,67 @@ kbd { font-family: var(--display); font-size: 0.85em; background: var(--chalk); 
 
 /* Let taps on the scene reach the canvas around these non-modal cards. */
 #shot, #shot .sheet { pointer-events: none; }
+
+/* ---------- social: Clubhouse button, live ticker, leaderboards ---------- */
+.club-btn { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-family: var(--display); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
+.club-btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.club-live { display: inline-flex; align-items: center; gap: 4px; background: var(--grass); border: 2px solid var(--ink); padding: 0 5px; font-size: 0.8em; line-height: 1.5; }
+.club-live::before, .live-dot { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #1fd15a; border: 2px solid var(--ink); animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.35; } }
+.live-dot { margin-left: 6px; vertical-align: middle; }
+
+#ticker {
+  position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 116px); max-width: min(360px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 10px; background: var(--ink); color: var(--chalk); border: 3px solid var(--chalk);
+  box-shadow: 4px 4px 0 rgba(27, 35, 64, 0.4); padding: 8px 10px; font-weight: 600; line-height: 1.3;
+}
+#ticker.in { animation: slideIn 0.35s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes slideIn { from { transform: translateX(-120%); } }
+.ticker-btn { flex: none; font-family: var(--display); font-size: 0.8em; text-transform: uppercase; background: var(--gold); color: var(--ink); border: 2px solid var(--chalk); padding: 4px 8px; }
+.ticker-btn:disabled { background: var(--grass); opacity: 0.8; }
+
+.daily-btn { background: var(--gold); width: 100%; }
+.club-card { width: min(760px, 100%); }
+.seg { display: flex; border: 3px solid var(--ink); background: var(--paper); }
+.seg button { flex: 1; font-family: var(--display); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; background: none; border: 0; padding: 10px 6px; }
+.seg button + button { border-left: 3px solid var(--ink); }
+.seg button[aria-selected="true"] { background: var(--ink); color: var(--chalk); }
+.club-panel { display: grid; gap: 10px; min-height: 140px; align-content: start; }
+.daily-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--paper); border: 3px solid var(--ink); padding: 10px 12px; }
+.daily-head > div { display: grid; gap: 2px; min-width: 0; }
+.daily-head span { font-size: 0.88em; color: var(--ink-soft); }
+.daily-head .btn { font-size: 0.85em; padding: 0.5em 0.9em; }
+.lv-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.lv-chips button { font-family: var(--display); width: 2.4em; height: 2.4em; background: #fff; border: 2px solid var(--ink); }
+.lv-chips button[aria-pressed="true"] { background: var(--gold); box-shadow: 0 3px 0 var(--ink); }
+.lv-title { font-family: var(--display); font-size: 0.9em; }
+.rank, .board ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: rank; }
+.rank li, .board li { counter-increment: rank; display: grid; grid-template-columns: 1.8em 24px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; background: #fff; border: 2px solid var(--ink); padding: 4px 10px; font-weight: 600; }
+.rank li::before, .board li::before { content: counter(rank); font-family: var(--display); color: var(--hot); }
+.rank li.me, .board li.me { background: var(--gold); }
+.rank .who, .board .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .club, .board .club { font-size: 0.85em; color: var(--ink-soft); }
+.rank li b, .board li b { font-family: var(--display); font-weight: 400; font-variant-numeric: tabular-nums; }
+.av { width: 24px; height: 24px; border: 2px solid var(--ink); background: var(--paper); object-fit: cover; display: block; }
+.club-extra { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.club-extra h3 { margin-bottom: 6px; }
+.feed { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 0.92em; }
+.feed li { border-bottom: 2px dashed #e8e1d2; padding-bottom: 4px; }
+.here { display: flex; flex-wrap: wrap; gap: 8px; }
+.here-p { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 2px solid var(--ink); padding: 3px 8px; font-weight: 600; font-size: 0.9em; }
+.online-pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--display); font-size: 0.8em; background: var(--paper); border: 3px solid var(--ink); padding: 4px 10px; }
+.muted { color: var(--ink-soft); font-weight: 500; }
+.copy-fallback { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); height: 6em; z-index: 10; font: inherit; border: 3px solid var(--ink); padding: 8px; }
+
+/* claude.ai shows a sign-in bar along the bottom for signed-out visitors: lift the controls above it. */
+#dock, #flightBar { transition: bottom 0.3s ease; }
+body.guest #dock, body.guest #flightBar { bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); }
+body.guest #shot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 110px); }
+
+@media (max-width: 640px) {
+  .club-lbl { display: none; }
+  .club-btn { padding: 6px 8px; }
+  #ticker { top: calc(env(safe-area-inset-top, 0px) + 128px); right: 12px; max-width: none; }
+  .rank li, .board li { grid-template-columns: 1.6em 24px minmax(0, 1fr) auto; }
+  .rank .club, .board .club { display: none; }
+}

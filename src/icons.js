@@ -17,6 +17,7 @@ const ART = {
   ball: ['..kkkk..', '.kwwwwk.', 'kwwswwwk', 'kwwwwswk', 'kwswwwwk', 'kwwwswwk', '.kwwwwk.', '..kkkk..'],
   grip: ['...kk...', '..kgk...', '..kgk...', '..kgk...', '..kgk...', '..kgk...', '..kgk...', '...s....'],
   lock: ['..kkkk..', '.k....k.', '.k....k.', 'kkkkkkkk', 'kyyyyyyk', 'kyykkyyk', 'kyyyyyyk', 'kkkkkkkk'],
+  trophy: ['yyyyyyyy', 'y.ywyy.y', 'y.ywyy.y', '.yyyyyy.', '..yyyy..', '...dd...', '..dddd..', '.kkkkkk.'],
   star: ['...yy...', '...yy...', 'yyyyyyyy', '.yyyyyy.', '..yyyy..', '.yyyyyy.', '.yy..yy.', 'y......y'],
 };
 

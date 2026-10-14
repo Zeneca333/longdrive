@@ -3,7 +3,8 @@
 import { GOLFERS, GEAR, ITEMS, LEVELS } from './config.js';
 import { icon } from './icons.js';
 import { sfx } from './audio.js';
-import { topDrives } from './board.js';
+import * as Board from './board.js';
+import { todayKey, dailyLevel, prettyDate } from './daily.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -17,8 +18,18 @@ function on(root, sel, fn) {
 
 // ---------- in-game (non-blocking) ----------
 
-export function renderBanner(level) {
+export function renderBanner(level, game) {
   const el = $('banner');
+  if (level.daily) {
+    const played = game.run.used;
+    el.innerHTML = `
+      <div class="b-lv">Daily Drive · ${esc(prettyDate(level.date))} · same course for everyone</div>
+      <div class="b-name">${esc(level.name.replace('Daily Drive: ', ''))}</div>
+      <div class="b-target">Starter gear · ${played ? `ball ${played + 1} of 3` : '3 balls'} · best one counts</div>
+      <p class="b-blurb">${esc(level.blurb)}</p>
+      <p class="b-record" id="bannerRecord" hidden></p>`;
+    return;
+  }
   el.innerHTML = `
     <div class="b-lv">Level ${level.id} of ${LEVELS.length} · ${esc(level.place)}</div>
     <div class="b-name">${esc(level.name)}</div>
@@ -31,8 +42,15 @@ export function fillBannerRecord(level, rows) {
   const rec = $('bannerRecord');
   if (!rows || !rec) return;
   rec.hidden = false;
-  rec.innerHTML = rows.length
-    ? `${icon('star', 14)} Course record ${rows[0].yards.toFixed(1)} by ${esc(rows[0].isMe ? 'you' : rows[0].name)}`
+  const top = rows[0];
+  if (level.daily) {
+    rec.innerHTML = top
+      ? `${icon('trophy', 14)} Leading today: ${top.yards.toFixed(1)} by ${esc(top.isMe ? 'you' : top.name)} · ${rows.length} played`
+      : `${icon('trophy', 14)} Nobody has played today's yet. Go first.`;
+    return;
+  }
+  rec.innerHTML = top
+    ? `${icon('star', 14)} Course record ${top.yards.toFixed(1)} by ${esc(top.isMe ? 'you' : top.name)}`
     : `${icon('star', 14)} No course record yet`;
 }
 
@@ -86,11 +104,12 @@ export function renderEnd(game, d) {
       <div class="end-links">
         ${d.cleared ? '<button class="link-btn" id="endRetry">Replay</button>' : ''}
         <button class="link-btn" id="endShop">Pro Shop · ${game.save.coins} coins</button>
-        <button class="link-btn" id="endLevels">All levels</button>
+        ${dailyDone(game) ? '' : '<button class="link-btn" id="endDaily">Daily Drive</button>'}
+        ${d.best > 0 ? '<button class="link-btn" id="endBrag">Copy brag</button>' : ''}
       </div>
     </div>`;
   const board = el.querySelector('#endBoard');
-  topDrives(lv.id, 3).then((rows) => {
+  Board.levelTop(lv.id, 3).then((rows) => {
     if (!rows || !rows.length || !board.isConnected) return;
     board.hidden = false;
     board.innerHTML = `<ol>${rows.map((r) => `<li class="${r.isMe ? 'me' : ''}"><span class="who">${esc(r.isMe ? `${r.name} (you)` : r.name)}</span><span class="club">${esc(golferName(r.golfer))}</span><b>${r.yards.toFixed(1)}</b></li>`).join('')}</ol>`;
@@ -98,7 +117,8 @@ export function renderEnd(game, d) {
   on(el, '#endGo', () => { sfx.click(); game.endPrimary(); });
   on(el, '#endRetry', () => { sfx.click(); game.restartLevel(); });
   on(el, '#endShop', () => { sfx.click(); game.openShop('end'); });
-  on(el, '#endLevels', () => { sfx.click(); game.openMap('end'); });
+  on(el, '#endDaily', () => { sfx.click(); game.startDaily(); });
+  on(el, '#endBrag', () => game.brag(`Just hit ${d.best.toFixed(1)} yds on ${lv.name} (${d.earned} star${d.earned === 1 ? '' : 's'}) in LONG DRIVE INSANITY. Your move:`));
   setTimeout(() => { if (el.querySelector('#endGo')) el.querySelector('#endGo').focus({ preventScroll: true }); }, 50);
 }
 
@@ -111,7 +131,9 @@ export function renderMenu(game) {
     <div class="sheet menu-card" role="dialog" aria-label="Menu">
       <div class="sheet-head"><h2>Menu</h2>${wallet(game)}</div>
       <button class="btn big grass" id="mResume">Back to the tee</button>
+      <button class="btn daily-btn" id="mDaily">${esc(dailyLabel(game))}</button>
       <div class="menu-grid">
+        ${game.social ? '<button class="btn ghost" id="mClub">Clubhouse</button>' : ''}
         <button class="btn ghost" id="mLevels">Levels</button>
         <button class="btn blue" id="mShop">Pro Shop</button>
         <button class="btn ghost" id="mGolfer">Golfer: ${esc(golferName(s.golfer))}</button>
@@ -122,6 +144,8 @@ export function renderMenu(game) {
     </div>`;
   on(el, '#mResume', () => { sfx.click(); game.resume(); });
   on(el, '#mLevels', () => { sfx.click(); game.openMap('menu'); });
+  on(el, '#mDaily', () => { sfx.click(); game.startDaily(); });
+  on(el, '#mClub', () => { sfx.click(); game.openClub('level', 'menu'); });
   on(el, '#mShop', () => { sfx.click(); game.openShop('menu'); });
   on(el, '#mGolfer', () => { sfx.click(); game.openSelect('menu'); });
   on(el, '#mHow', () => { sfx.click(); game.openHowto('menu'); });
@@ -243,4 +267,190 @@ export function renderShop(game, back) {
     if (endShop) endShop.textContent = `Pro Shop · ${game.save.coins} coins`;
     game.goBack(back);
   });
+}
+
+// ---------- the Daily Drive ----------
+
+function dailyState(game) {
+  const d = game.save.daily;
+  return d?.date === todayKey() ? d : null;
+}
+
+function dailyDone(game) { return (dailyState(game)?.used || 0) >= 3; }
+
+function dailyLabel(game) {
+  const d = dailyState(game);
+  if (!d) return "Play today's Daily Drive";
+  if (d.used >= 3) return `Daily Drive done · ${d.best.toFixed(1)} yds`;
+  return `Finish the Daily Drive (${d.used} of 3)`;
+}
+
+export function renderDailyEnd(game, d) {
+  const el = $('end');
+  el.innerHTML = `
+    <div class="sheet end-card" role="dialog" aria-label="Daily Drive result">
+      <div class="end-hero">
+        <div class="eyebrow">Daily Drive · ${esc(prettyDate(d.level.date))} · ${esc(d.level.name.replace('Daily Drive: ', ''))}</div>
+        <h2>${d.best.toFixed(1)} yds</h2>
+        <p id="dailyRank">${game.social ? 'Checking the board…' : 'Same course for everyone today. A new one lands at midnight UTC.'}</p>
+        <p class="tip">+${d.roundCoins} coins</p>
+      </div>
+      <div class="board" id="endBoard" hidden></div>
+      <button class="btn big grass end-go" id="endGo">Back to the tour</button>
+      <div class="end-links">
+        <button class="link-btn" id="endBrag">Copy brag</button>
+        ${game.social ? '<button class="link-btn" id="endClub">Clubhouse</button>' : ''}
+      </div>
+    </div>`;
+  Board.dailyTop(d.level.date).then((rows) => {
+    if (!rows || !el.isConnected) return;
+    const rank = rows.findIndex((r) => r.isMe) + 1;
+    const rk = $('dailyRank');
+    if (rk) rk.innerHTML = rank ? `You're <b>#${rank}</b> of ${rows.length} today.` : `${rows.length} played today.`;
+    const board = el.querySelector('#endBoard');
+    if (!rows.length || !board) return;
+    board.hidden = false;
+    board.innerHTML = `<ol>${rows.slice(0, 5).map((r) => rowHtml(r, r.yards.toFixed(1), golferName(r.golfer))).join('')}</ol>`;
+  });
+  on(el, '#endGo', () => { sfx.click(); game.endPrimary(); });
+  on(el, '#endBrag', () => game.brag(game.bragLine()));
+  on(el, '#endClub', () => { sfx.click(); game.openClub('daily', 'end'); });
+  setTimeout(() => el.querySelector('#endGo')?.focus({ preventScroll: true }), 50);
+}
+
+// ---------- the Clubhouse ----------
+
+function rowHtml(r, value, sub) {
+  const av = r.avatar ? `<img class="av" src="${esc(r.avatar)}" alt="" width="24" height="24">` : '<span class="av"></span>';
+  return `<li class="${r.isMe ? 'me' : ''}">${av}<span class="who">${esc(r.name)}${r.isMe ? ' (you)' : ''}${r.online ? '<i class="live-dot" title="On the course now"></i>' : ''}</span><span class="club">${esc(sub || '')}</span><b>${value}</b></li>`;
+}
+
+function ago(ms) {
+  const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+}
+
+export function renderClub(game, tab = 'level', back = 'menu') {
+  const el = $('club');
+  const curLevel = game.run && !game.run.level.daily ? game.run.level.id : game.save.level || 1;
+  let levelSel = curLevel;
+  el.innerHTML = `
+    <div class="sheet club-card" role="dialog" aria-label="Clubhouse">
+      <div class="sheet-head">
+        <div><div class="eyebrow">Clubhouse</div><h2>Leaderboards</h2></div>
+        <div class="online-pill" id="clubOnlinePill" hidden></div>
+      </div>
+      <div class="seg" role="tablist">
+        <button role="tab" data-tab="daily">Daily Drive</button>
+        <button role="tab" data-tab="level">Levels</button>
+        <button role="tab" data-tab="tour">Tour</button>
+      </div>
+      <div id="clubPanel" class="club-panel"></div>
+      <div class="club-extra">
+        <div><h3>Recent bombs</h3><ol class="feed" id="clubRecent"><li class="muted">Loading…</li></ol></div>
+        <div><h3>On the course now</h3><div class="here" id="clubHere"><span class="muted">Just you right now.</span></div></div>
+      </div>
+      <div class="sheet-foot">
+        <button class="btn ghost" id="clubBrag">Copy brag</button>
+        <button class="btn" id="clubBack">Back</button>
+      </div>
+    </div>`;
+
+  const panel = el.querySelector('#clubPanel');
+  const show = (t) => {
+    tab = t;
+    for (const b of el.querySelectorAll('.seg button')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
+    if (t === 'daily') drawDaily();
+    else if (t === 'level') drawLevel();
+    else drawTour();
+  };
+  const empty = (msg) => `<p class="muted">${msg}</p>`;
+  const offline = 'Leaderboards live on the published claude.ai version of the game.';
+
+  function drawDaily() {
+    const key = todayKey();
+    const lv = dailyLevel(key);
+    const st = dailyState(game);
+    const action = st && st.used >= 3 ? `<span class="chip gold">You played: ${st.best.toFixed(1)} yds</span>`
+      : `<button class="btn grass" id="clubPlayDaily">${st ? `Finish it (${st.used} of 3)` : "Play today's"}</button>`;
+    panel.innerHTML = `
+      <div class="daily-head">
+        <div><b>${esc(prettyDate(key))} · ${esc(lv.name.replace('Daily Drive: ', ''))}</b><span>Same course and wind for everyone · starter gear · 3 balls</span></div>
+        ${action}
+      </div>
+      <ol class="rank" id="clubRows"><li class="muted">Loading…</li></ol>`;
+    on(panel, '#clubPlayDaily', () => { sfx.click(); game.startDaily(); });
+    Board.dailyTop(key).then((rows) => {
+      const ol = panel.querySelector('#clubRows');
+      if (!ol || tab !== 'daily') return;
+      ol.outerHTML = !rows ? empty(offline) : rows.length
+        ? `<ol class="rank">${rows.slice(0, 15).map((r) => rowHtml(r, r.yards.toFixed(1), golferName(r.golfer))).join('')}</ol>`
+        : empty('Nobody has played today yet. Go first and set the bar.');
+    });
+  }
+
+  function drawLevel() {
+    panel.innerHTML = `
+      <div class="lv-chips">${LEVELS.map((l) => `<button data-lv="${l.id}" aria-pressed="${l.id === levelSel}" title="${esc(l.name)}">${l.id}</button>`).join('')}</div>
+      <div class="lv-title">${esc(LEVELS[levelSel - 1].name)} · target ${LEVELS[levelSel - 1].stars[0]}</div>
+      <ol class="rank" id="clubRows"><li class="muted">Loading…</li></ol>`;
+    on(panel, '[data-lv]', (b) => { levelSel = Number(b.dataset.lv); sfx.tick(); drawLevel(); });
+    const want = levelSel;
+    Board.levelTop(want, 10).then((rows) => {
+      const ol = panel.querySelector('#clubRows');
+      if (!ol || tab !== 'level' || levelSel !== want) return;
+      ol.outerHTML = !rows ? empty(offline) : rows.length
+        ? `<ol class="rank">${rows.map((r) => rowHtml(r, r.yards.toFixed(1), golferName(r.golfer))).join('')}</ol>`
+        : empty('No drives posted on this course yet.');
+    });
+  }
+
+  function drawTour() {
+    panel.innerHTML = `<div class="lv-title">Tour standings: most stars, then longest drive</div><ol class="rank" id="clubRows"><li class="muted">Loading…</li></ol>`;
+    Board.tourTop(20).then((rows) => {
+      const ol = panel.querySelector('#clubRows');
+      if (!ol || tab !== 'tour') return;
+      ol.outerHTML = !rows ? empty(offline) : rows.length
+        ? `<ol class="rank">${rows.map((r) => rowHtml(r, `${r.stars}★`, r.longest ? `Longest ${r.longest.toFixed(1)}` : '')).join('')}</ol>`
+        : empty('Nobody has earned a star yet.');
+    });
+  }
+
+  Board.recentBombs(6).then((rows) => {
+    const ol = el.querySelector('#clubRecent');
+    if (!ol) return;
+    ol.innerHTML = !rows ? `<li class="muted">${offline}</li>` : rows.length
+      ? rows.map((r) => `<li><b>${esc(r.isMe ? 'You' : r.name)}</b> hit ${r.yards.toFixed(1)} on ${esc(r.lv ? LEVELS[r.lv - 1]?.name || '' : 'the Daily Drive')} <span class="muted">${ago(r.at)}</span></li>`).join('')
+      : '<li class="muted">No drives yet.</li>';
+  });
+  Board.onlineNow().then((people) => {
+    const box = el.querySelector('#clubHere');
+    const pill = el.querySelector('#clubOnlinePill');
+    if (!box || !people.length) return;
+    pill.hidden = false;
+    pill.innerHTML = `<i class="live-dot"></i>${people.length} on the course`;
+    box.innerHTML = people.map((p) => `<span class="here-p">${p.avatar ? `<img class="av" src="${esc(p.avatar)}" alt="" width="24" height="24">` : ''}${esc(p.name)} <span class="muted">${p.daily ? 'Daily Drive' : esc(LEVELS[p.lv - 1]?.name || 'warming up')}</span></span>`).join('');
+  });
+
+  on(el, '.seg button', (b) => { sfx.tick(); show(b.dataset.tab); });
+  on(el, '#clubBrag', () => game.brag(tab === 'daily' && dailyDone(game)
+    ? `Daily Drive ${prettyDate(todayKey())}: ${dailyState(game).best.toFixed(1)} yds in LONG DRIVE INSANITY. Same course, same wind, your move:`
+    : game.bragLine()));
+  on(el, '#clubBack', () => { sfx.click(); game.goBack(back); });
+  show(tab);
+}
+
+// If the clipboard is blocked, show the text selected so it can be copied by hand.
+export function showCopyFallback(text) {
+  const box = document.createElement('textarea');
+  box.className = 'copy-fallback';
+  box.value = text;
+  box.readOnly = true;
+  document.body.appendChild(box);
+  box.focus();
+  box.select();
+  setTimeout(() => box.remove(), 8000);
 }

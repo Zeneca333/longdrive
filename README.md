@@ -94,7 +94,8 @@ The page opens straight onto the first tee, and your first tap is your first swi
 | `src/game.js` | The state machine and game loop |
 | `src/ui.js` | Menus: golfer select, tour map, Pro Shop, results |
 | `src/audio.js` | Synthesised sound effects |
-| `src/board.js` | Optional shared leaderboard on claude.ai |
+| `src/board.js` | Leaderboards, live ticker and presence on claude.ai (no-op elsewhere) |
+| `src/daily.js` | The Daily Drive: today's course and wind from the date |
 
 Physics, the swing and the level layouts don't touch three.js, so they're unit tested in Node:
 
@@ -106,11 +107,21 @@ One of those tests simulates a pure drive with fair gear on every level, so if y
 
 Progress is saved in your browser's `localStorage`.
 
-## Leaderboard
+## Play it
 
-When the game runs as a published claude.ai artifact, it gets a shared leaderboard:
-- Each player's best drive per level goes to a `drives/<player id>` document.
-- The level intro shows the course record.
-- The round summary shows the top five.
+- **claude.ai (with leaderboards):** https://claude.ai/artifact/UfJ3fMHwP2eaCE2Vhs4tbD
+- **Standalone (no sign-in, no leaderboards):** https://raw.githack.com/Zeneca333/longdrive/HEAD/index.html. It's served straight from this repo's default branch and picks up each push within a few minutes.
 
-`src/board.js` is the only file that knows about it. Anywhere else (locally, GitHub Pages) the board simply doesn't appear.
+## Social
+
+**These work everywhere:**
+- **Daily Drive.** Everyone gets the same course, the same wind for each ball and the same starter gear, with one three-ball attempt per day. The date comes from UTC, so the whole world shares one course. Open it from Menu.
+- **Your flag.** Your best drive on each course stands on the fairway as a flag, so you always know what to beat.
+
+**These light up on the claude.ai version (`src/board.js`):**
+- **Clubhouse** (HUD button): today's Daily Drive board, top 10 per level, tour standings (most stars, then longest drive), a feed of recent bombs and who's on the course right now.
+- **Rival flags.** The top three drives on each course show as name flags where those balls stopped.
+- **Live ticker.** When someone online hits a personal best or sets a course record, everyone online sees it. If they took *your* record, you hear about it. Tap **Nice!** to send them kudos.
+- **Copy brag.** Copies a one-liner with your score and the link, ready to paste into a chat.
+
+How it's stored: one document per player at `drives/<player id>` holding their best per level, where it stopped, total stars, longest drive and today's Daily Drive. Everyone can read every row, and each player can only write their own. Live events (`drive`, `kudos`) go over the artifact's room and are never stored. Signed-out visitors can play everything, but they don't post scores. The swing controls also lift above claude.ai's sign-in bar for them.
