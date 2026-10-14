@@ -1,0 +1,12 @@
+{
+  "name": "long-drive-insanity",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A goofy voxel long-drive golf game. Three clicks, three balls, increasingly unhinged obstacles.",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve -l 5173 .",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Long Drive Insanity</title>
+<meta name="description" content="A goofy voxel long-drive golf game. Three clicks, three balls, increasingly unhinged obstacles.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="Long Drive Insanity game view"></canvas>
+
+<div id="ui">
+  <header id="hud" hidden>
+    <div class="panel hud-card">
+      <div class="hud-level" id="hudLevel"></div>
+      <div class="hud-stats">
+        <span class="lbl">Target</span><b id="hudTarget">0</b>
+        <span class="lbl">Best</span><b id="hudBest">-</b>
+      </div>
+      <div class="balls" id="hudBalls" aria-label="Balls left"></div>
+    </div>
+    <div class="hud-right">
+      <div class="panel wind" id="wind" title="Wind">
+        <svg class="wind-arrow" id="windArrow" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
+          <path d="M12 2 L19 11 L14.5 11 L14.5 22 L9.5 22 L9.5 11 L5 11 Z" fill="currentColor" stroke="#1b2340" stroke-width="1.6" stroke-linejoin="round"/>
+        </svg>
+        <div class="wind-txt"><b id="windMph">0</b><span>mph</span></div>
+        <div class="wind-word" id="windWord">Calm</div>
+      </div>
+      <div class="panel coins"><span id="coinIcon"></span><b id="hudCoins">0</b></div>
+      <button class="sq-btn" id="pauseBtn" aria-label="Pause">II</button>
+    </div>
+  </header>
+
+  <div id="dock" hidden>
+    <div id="hint"></div>
+    <div id="meter" aria-hidden="true">
+      <div class="m-track">
+        <div class="m-fill" id="mFill"></div>
+        <div class="m-over" id="mOver"></div>
+        <div class="m-sweet" id="mSweet"></div>
+        <div class="m-mark" id="mMark100"><span>100</span></div>
+        <div class="m-lock" id="mLock"></div>
+        <div class="m-needle" id="mNeedle"></div>
+      </div>
+      <div class="m-legend"><span>Slice</span><span>Hook</span><span class="m-gap"></span><span>Power</span><span class="m-over-lbl">Over</span></div>
+    </div>
+    <div class="dock-row">
+      <div class="panel aim">
+        <button class="sq-btn" id="aimL" aria-label="Aim left">&lsaquo;</button>
+        <div class="aim-val"><span class="lbl">Aim</span><b id="aimVal">0&deg;</b></div>
+        <button class="sq-btn" id="aimR" aria-label="Aim right">&rsaquo;</button>
+      </div>
+      <button class="panel shape" id="shapeBtn"><span class="lbl">Shot</span><b id="shapeVal">Stock</b></button>
+      <div class="tray" id="tray"></div>
+    </div>
+  </div>
+
+  <div id="flightBar" hidden>
+    <button class="btn hot" id="rocketBtn" hidden>Fire rocket</button>
+    <button class="btn ghost" id="ffBtn">Fast forward</button>
+  </div>
+
+  <div id="pop" aria-live="polite"></div>
+  <div id="toast" aria-live="polite"></div>
+
+  <section class="screen" id="title">
+    <div class="title-top">
+      <h1 class="logo"><span class="l1">Long Drive</span><span class="l2">Insanity</span></h1>
+      <p class="tagline">Three clicks. Three balls. One very silly grid.</p>
+    </div>
+    <div class="title-wrap">
+      <div class="title-btns">
+        <button class="btn big" id="playBtn">Tee off</button>
+        <button class="btn ghost" id="howBtn">How to play</button>
+      </div>
+      <p class="title-foot">Click, tap or press <kbd>Space</kbd> to swing</p>
+    </div>
+  </section>
+
+  <section class="screen modal" id="howto" hidden></section>
+  <section class="screen modal" id="select" hidden></section>
+  <section class="screen modal" id="map" hidden></section>
+  <section class="screen" id="intro" hidden></section>
+  <section class="screen" id="shot" hidden></section>
+  <section class="screen modal" id="end" hidden></section>
+  <section class="screen modal" id="shop" hidden></section>
+  <section class="screen modal" id="pause" hidden></section>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
